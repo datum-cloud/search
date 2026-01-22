@@ -11,9 +11,9 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/klog/v2"
 
-	_ "github.com/example-org/example-service/internal/metrics"
-	"github.com/example-org/example-service/pkg/apis/example-service/install"
-	"github.com/example-org/example-service/pkg/apis/example-service/v1alpha1"
+	_ "go.datum.net/search/internal/metrics"
+	"go.datum.net/search/pkg/apis/search/install"
+	"go.datum.net/search/pkg/apis/search/v1alpha1"
 )
 
 var (
@@ -50,8 +50,8 @@ type Config struct {
 	ExtraConfig   ExtraConfig
 }
 
-// ExampleServiceServer is the search aggregated apiserver.
-type ExampleServiceServer struct {
+// SearchServer is the search aggregated apiserver.
+type SearchServer struct {
 	GenericAPIServer *genericapiserver.GenericAPIServer
 }
 
@@ -76,37 +76,22 @@ func (cfg *Config) Complete() CompletedConfig {
 	return CompletedConfig{&c}
 }
 
-// New creates and initializes the ExampleServiceServer with storage and API groups.
-func (c completedConfig) New() (*ExampleServiceServer, error) {
+// New creates and initializes the SearchServer with storage and API groups.
+func (c completedConfig) New() (*SearchServer, error) {
 	genericServer, err := c.GenericConfig.New("search-apiserver", genericapiserver.NewEmptyDelegate())
 	if err != nil {
 		return nil, err
 	}
 
-	s := &ExampleServiceServer{
+	s := &SearchServer{
 		GenericAPIServer: genericServer,
 	}
 
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(v1alpha1.GroupName, Scheme, metav1.ParameterCodec, Codecs)
 
 	v1alpha1Storage := map[string]rest.Storage{}
-
-	// TEMPLATE NOTE: This is where you register your REST storage implementations.
-	// You need to create a storage backend that implements rest.Storage interface.
-	//
-	// Example pattern:
-	//   storage := registry.NewYourResourceStorage(/* backend config */)
-	//   v1alpha1Storage["yourresources"] = storage
-	//
-	// The storage implementation should handle:
-	// - Connecting to your backend (database, API, cache, etc.)
-	// - CRUD operations (Create, Get, List, Update, Delete, Watch)
-	// - Validation and business logic
-	//
-	// See kubernetes sample-apiserver for reference implementations:
-	// https://github.com/kubernetes/sample-apiserver/tree/master/pkg/registry
-	//
-	// TODO: Add your storage implementations here
+	// TODO: Add storage implementations here
+	// Example: v1alpha1Storage["searchqueries"] = search.NewQueryStorage(storage)
 
 	apiGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = v1alpha1Storage
 
@@ -114,12 +99,12 @@ func (c completedConfig) New() (*ExampleServiceServer, error) {
 		return nil, err
 	}
 
-	klog.Info("ExampleService server initialized successfully")
+	klog.Info("Search server initialized successfully")
 
 	return s, nil
 }
 
 // Run starts the server.
-func (s *ExampleServiceServer) Run(ctx context.Context) error {
+func (s *SearchServer) Run(ctx context.Context) error {
 	return s.GenericAPIServer.PrepareRun().RunWithContext(ctx)
 }

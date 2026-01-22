@@ -1,6 +1,6 @@
 # Kubernetes Deployment Configuration
 
-This directory contains Kustomize-based Kubernetes deployment manifests for the example-service aggregated API server.
+This directory contains Kustomize-based Kubernetes deployment manifests for the search aggregated API server.
 
 ## Structure
 
@@ -36,21 +36,21 @@ config/
 kubectl apply -k config/overlays/dev
 
 # Check deployment status
-kubectl get pods -n example-system
-kubectl get apiservice v1alpha1.example.example-org.io
+kubectl get pods -n search-system
+kubectl get apiservice v1alpha1.search.miloapis.com
 ```
 
 ### 2. Verify API Registration
 
 ```bash
 # Check if the APIService is available
-kubectl get apiservices | grep example
+kubectl get apiservices | grep search
 
 # List API resources (once storage is implemented)
-kubectl api-resources | grep example-org
+kubectl api-resources | grep datum
 
 # Try creating a resource (once storage is implemented)
-kubectl get exampleresources
+kubectl get searchqueries
 ```
 
 ## Components
@@ -83,7 +83,7 @@ mkdir -p config/overlays/production
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: example-system
+namespace: search-system
 
 resources:
   - ../../base
@@ -95,7 +95,7 @@ components:
   - ../../components/observability
 
 images:
-  - name: ghcr.io/example-org/example-service
+  - name: ghcr.io/datum-cloud/search
     newTag: v1.0.0
 
 # Production-specific patches
@@ -107,7 +107,7 @@ patches:
         value: 3
     target:
       kind: Deployment
-      name: example-service-apiserver
+      name: search-apiserver
 
   # Production resource limits
   - patch: |-
@@ -119,16 +119,8 @@ patches:
         value: "2Gi"
     target:
       kind: Deployment
-      name: example-service-apiserver
+      name: search-apiserver
 ```
-
-### TEMPLATE NOTE: Find and Replace
-
-When customizing this template, replace:
-- `example-system` → your namespace
-- `example-service` → your service name
-- `example.example-org.io` → your API group
-- `ghcr.io/example-org/example-service` → your container image
 
 ## TLS Certificates
 
@@ -150,11 +142,11 @@ components:
 ```bash
 # Generate self-signed certificate
 openssl req -x509 -newkey rsa:4096 -keyout tls.key -out tls.crt \
-  -days 365 -nodes -subj "/CN=example-service-apiserver.example-system.svc"
+  -days 365 -nodes -subj "/CN=search-apiserver.search-system.svc"
 
 # Create secret
-kubectl create secret tls example-service-tls \
-  --cert=tls.crt --key=tls.key -n example-system
+kubectl create secret tls search-tls \
+  --cert=tls.crt --key=tls.key -n search-system
 ```
 
 ## Observability
@@ -180,10 +172,10 @@ components:
 
 ```bash
 # Check API server logs
-kubectl logs -n example-system -l app=example-service-apiserver --tail=50
+kubectl logs -n search-system -l app=search-apiserver --tail=50
 
 # Check APIService status
-kubectl get apiservice v1alpha1.example.example-org.io -o yaml
+kubectl get apiservice v1alpha1.search.miloapis.com -o yaml
 ```
 
 **Common causes:**
@@ -195,20 +187,20 @@ kubectl get apiservice v1alpha1.example.example-org.io -o yaml
 
 ```bash
 # Describe pod for detailed events
-kubectl describe pod -n example-system -l app=example-service-apiserver
+kubectl describe pod -n search-system -l app=search-apiserver
 
 # Check logs
-kubectl logs -n example-system -l app=example-service-apiserver --previous
+kubectl logs -n search-system -l app=search-apiserver --previous
 ```
 
 ### Image Pull Errors
 
 ```bash
 # Check events
-kubectl get events -n example-system --sort-by='.lastTimestamp'
+kubectl get events -n search-system --sort-by='.lastTimestamp'
 
 # Verify image exists
-docker pull ghcr.io/example-org/example-service:dev
+docker pull ghcr.io/datum-cloud/search:dev
 ```
 
 ## Production Checklist

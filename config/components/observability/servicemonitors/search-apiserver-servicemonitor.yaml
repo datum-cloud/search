@@ -1,16 +1,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: example-service-apiserver
+  name: search-apiserver
   labels:
-    app: example-service-apiserver
-    app.kubernetes.io/name: example-service-apiserver
+    app: search-apiserver
+    app.kubernetes.io/name: search-apiserver
     app.kubernetes.io/component: apiserver
     monitoring: "true"
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: example-service
+      app.kubernetes.io/name: search
   endpoints:
     - port: https
       path: /metrics
@@ -34,4 +34,4 @@ spec:
           targetLabel: service
   namespaceSelector:
     matchNames:
-      - example-system
+      - search-system

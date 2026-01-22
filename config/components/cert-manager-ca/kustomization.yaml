@@ -9,11 +9,11 @@ resources:
 patches:
   - target:
       kind: Deployment
-      name: example-service-apiserver
+      name: search-apiserver
     patch: |-
       - op: replace
         path: /spec/template/spec/volumes/0/csi/volumeAttributes/csi.cert-manager.io~1issuer-name
-        value: example-service-ca-issuer
+        value: search-ca-issuer
       - op: replace
         path: /spec/template/spec/volumes/0/csi/volumeAttributes/csi.cert-manager.io~1issuer-kind
         value: Issuer

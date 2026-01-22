@@ -1,4 +1,4 @@
-// Package version provides version information for the ExampleService API server.
+// Package version provides version information for the Search API server.
 // Version information is injected at build time using ldflags.
 package version
 
@@ -8,24 +8,24 @@ import (
 )
 
 var (
-	// Version is the semantic version of the ExampleService API server (e.g., "v0.1.0", "v1.2.3")
+	// Version is the semantic version of the Search API server (e.g., "v0.1.0", "v1.2.3")
 	// This can be set via ldflags during build:
-	//   -ldflags="-X 'github.com/example-org/example-service/internal/version.Version=v0.1.0'"
+	//   -ldflags="-X 'go.datum.net/search/internal/version.Version=v0.1.0'"
 	Version = "dev"
 
 	// GitCommit is the git commit hash of the build
 	// This can be set via ldflags during build:
-	//   -ldflags="-X 'github.com/example-org/example-service/internal/version.GitCommit=$(git rev-parse HEAD)'"
+	//   -ldflags="-X 'go.datum.net/search/internal/version.GitCommit=$(git rev-parse HEAD)'"
 	GitCommit = "unknown"
 
 	// GitTreeState indicates whether the git tree was clean or dirty during build
 	// This can be set via ldflags during build:
-	//   -ldflags="-X 'github.com/example-org/example-service/internal/version.GitTreeState=clean'"
+	//   -ldflags="-X 'go.datum.net/search/internal/version.GitTreeState=clean'"
 	GitTreeState = "unknown"
 
 	// BuildDate is the date when the binary was built (RFC3339 format)
 	// This can be set via ldflags during build:
-	//   -ldflags="-X 'github.com/example-org/example-service/internal/version.BuildDate=$(date -u '+%Y-%m-%dT%H:%M:%SZ')'"
+	//   -ldflags="-X 'go.datum.net/search/internal/version.BuildDate=$(date -u '+%Y-%m-%dT%H:%M:%SZ')'"
 	BuildDate = "unknown"
 )
 
@@ -55,6 +55,6 @@ func Get() Info {
 
 // String returns a human-readable version string
 func (i Info) String() string {
-	return fmt.Sprintf("ExampleService API Server %s (commit: %s, built: %s, go: %s, platform: %s)",
+	return fmt.Sprintf("Search API Server %s (commit: %s, built: %s, go: %s, platform: %s)",
 		i.Version, i.GitCommit, i.BuildDate, i.GoVersion, i.Platform)
 }

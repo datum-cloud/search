@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: example-service-apiserver
+  name: search-apiserver
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: example-service-apiserver
+      app: search-apiserver
   template:
     metadata:
       labels:
-        app: example-service-apiserver
+        app: search-apiserver
     spec:
-      serviceAccountName: example-service-apiserver
+      serviceAccountName: search-apiserver
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -22,7 +22,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: apiserver
-        image: ghcr.io/example-org/example-service:latest
+        image: ghcr.io/datum-cloud/search:latest
         imagePullPolicy: IfNotPresent
         securityContext:
           allowPrivilegeEscalation: false
@@ -37,7 +37,7 @@ spec:
           name: https
           protocol: TCP
         command:
-        - /example-service
+        - /search
         - serve
         args:
         - --secure-port=$(SECURE_PORT)
@@ -63,9 +63,9 @@ spec:
         - name: SECURE_PORT
           value: "8443"
         - name: TLS_CERT_FILE
-          value: "/var/run/example-service-apiserver/tls/tls.crt"
+          value: "/var/run/search-apiserver/tls/tls.crt"
         - name: TLS_PRIVATE_KEY_FILE
-          value: "/var/run/example-service-apiserver/tls/tls.key"
+          value: "/var/run/search-apiserver/tls/tls.key"
         - name: KUBECONFIG
           value: ""
         - name: AUTHENTICATION_KUBECONFIG
@@ -119,7 +119,7 @@ spec:
           periodSeconds: 10
         volumeMounts:
         - name: tls-certs
-          mountPath: /var/run/example-service-apiserver/tls
+          mountPath: /var/run/search-apiserver/tls
           readOnly: true
         - name: control-plane-ca
           mountPath: /etc/kubernetes/pki/requestheader
@@ -134,8 +134,8 @@ spec:
           volumeAttributes:
             csi.cert-manager.io/issuer-name: selfsigned-cluster-issuer
             csi.cert-manager.io/issuer-kind: ClusterIssuer
-            csi.cert-manager.io/common-name: example-service-apiserver.example-system.svc
-            csi.cert-manager.io/dns-names: "example-service-apiserver,example-service-apiserver.example-system,example-service-apiserver.example-system.svc,example-service-apiserver.example-system.svc.cluster.local"
+            csi.cert-manager.io/common-name: search-apiserver.search-system.svc
+            csi.cert-manager.io/dns-names: "search-apiserver,search-apiserver.search-system,search-apiserver.search-system.svc,search-apiserver.search-system.svc.cluster.local"
             csi.cert-manager.io/duration: "8760h"
             csi.cert-manager.io/renew-before: "720h"
             csi.cert-manager.io/fs-group: "65532"

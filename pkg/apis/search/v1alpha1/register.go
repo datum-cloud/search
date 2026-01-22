@@ -6,9 +6,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// TEMPLATE NOTE: Change this to your API group domain (e.g., "myresource.mycompany.io")
 // GroupName is the group name for the search API
-const GroupName = "example.example-org.io"
+const GroupName = "search.miloapis.com"
 
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
@@ -28,8 +27,8 @@ func Resource(resource string) schema.GroupResource {
 // addKnownTypes adds the set of types defined in this package to the supplied scheme
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
-		&ExampleResource{},
-		&ExampleResourceList{},
+		&SearchQuery{},
+		&SearchQueryList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
