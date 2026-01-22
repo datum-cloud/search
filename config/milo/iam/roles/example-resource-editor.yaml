@@ -1,0 +1,15 @@
+# TEMPLATE NOTE: This defines a Milo Role with specific permissions
+# Users/ServiceAccounts can be granted this role via RoleBindings
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: example.example-org.io-example-resource-editor
+  namespace: milo-system
+spec:
+  launchStage: Beta  # Alpha, Beta, or GA
+  includedPermissions:
+    - example.example-org.io/exampleresources.create
+    - example.example-org.io/exampleresources.get
+    - example.example-org.io/exampleresources.list
+    - example.example-org.io/exampleresources.update
+    - example.example-org.io/exampleresources.delete

@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: example-system
+
+resources:
+  - ../../base
+
+# Include components for development environment
+components:
+  - ../../components/namespace
+  - ../../components/api-registration
+  - ../../components/cert-manager-ca
+  - ../../components/observability
+  - ../../components/tracing
+
+# Override image tag for dev builds
+images:
+  - name: ghcr.io/example-org/example-service
+    newTag: dev

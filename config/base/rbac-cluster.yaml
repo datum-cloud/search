@@ -1,0 +1,30 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: example-service-apiserver
+rules:
+# Allow reading extension-apiserver-authentication configmap for authentication
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["extension-apiserver-authentication"]
+  verbs: ["get", "list", "watch"]
+# Allow reading flow control resources for API Priority and Fairness
+- apiGroups: ["flowcontrol.apiserver.k8s.io"]
+  resources: ["flowschemas", "prioritylevelconfigurations"]
+  verbs: ["get", "list", "watch"]
+# Allow creating subjectaccessreviews for authorization checks
+- apiGroups: ["authorization.k8s.io"]
+  resources: ["subjectaccessreviews"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: example-service-apiserver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: example-service-apiserver
+subjects:
+- kind: ServiceAccount
+  name: example-service-apiserver

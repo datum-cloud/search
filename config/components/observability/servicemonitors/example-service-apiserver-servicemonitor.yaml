@@ -1,0 +1,37 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: example-service-apiserver
+  labels:
+    app: example-service-apiserver
+    app.kubernetes.io/name: example-service-apiserver
+    app.kubernetes.io/component: apiserver
+    monitoring: "true"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: example-service
+  endpoints:
+    - port: https
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+      relabelings:
+        # Add pod name label
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        # Add node name label
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+        # Add namespace label
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        # Add service name label
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+  namespaceSelector:
+    matchNames:
+      - example-system

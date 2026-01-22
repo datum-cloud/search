@@ -1,0 +1,125 @@
+version: '3'
+
+# TEMPLATE NOTE: Update these variables for your service:
+# - IMAGE_NAME: Change to your container registry and image name
+# - Update all references to "example-service" throughout this file
+vars:
+  TOOL_DIR: "{{.USER_WORKING_DIR}}/bin"
+  IMAGE_NAME: "ghcr.io/example-org/example-service"  # TEMPLATE: Change to your registry/image
+  IMAGE_TAG: "dev"
+
+tasks:
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  # Build tasks
+  build:
+    desc: Build the search binary
+    # TEMPLATE NOTE: Update the ldflags to use your module path
+    cmds:
+      - |
+        set -e
+        echo "Building example-service..."
+        mkdir -p {{.TOOL_DIR}}
+
+        # Get git information for version injection
+        GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        VERSION="v0.0.0-dev+${GIT_COMMIT:0:7}"
+        GIT_TREE_STATE="clean"
+        if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+          GIT_TREE_STATE="dirty"
+        fi
+        BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo "unknown")
+
+        echo "Version: ${VERSION}, Commit: ${GIT_COMMIT:0:7}, Tree: ${GIT_TREE_STATE}"
+
+        # TEMPLATE: Update module path and binary name
+        go build \
+          -ldflags="-X 'github.com/example-org/example-service/internal/version.Version=${VERSION}' \
+                    -X 'github.com/example-org/example-service/internal/version.GitCommit=${GIT_COMMIT}' \
+                    -X 'github.com/example-org/example-service/internal/version.GitTreeState=${GIT_TREE_STATE}' \
+                    -X 'github.com/example-org/example-service/internal/version.BuildDate=${BUILD_DATE}'" \
+          -o {{.TOOL_DIR}}/example-service ./cmd/example-service
+        echo "✅ Binary built: {{.TOOL_DIR}}/example-service"
+    silent: true
+
+  # Development tasks
+  dev:build:
+    desc: Build the Search server container image for development
+    silent: true
+    cmds:
+      - |
+        set -e
+        echo "Building Search server container image: {{.IMAGE_NAME}}:{{.IMAGE_TAG}}"
+
+        # Get git information for version injection
+        GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        VERSION="v0.0.0-dev+${GIT_COMMIT:0:7}"
+        GIT_TREE_STATE="clean"
+        if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+          GIT_TREE_STATE="dirty"
+        fi
+        BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo "unknown")
+
+        docker build \
+          --build-arg VERSION="${VERSION}" \
+          --build-arg GIT_COMMIT="${GIT_COMMIT}" \
+          --build-arg GIT_TREE_STATE="${GIT_TREE_STATE}" \
+          --build-arg BUILD_DATE="${BUILD_DATE}" \
+          -t {{.IMAGE_NAME}}:{{.IMAGE_TAG}} \
+          .
+
+        echo "✅ Container image built: {{.IMAGE_NAME}}:{{.IMAGE_TAG}}"
+
+  # Code generation tasks
+  generate:
+    desc: Generate deepcopy and client code
+    # TEMPLATE NOTE: Update the package path to match your module and API group
+    cmds:
+      - |
+        set -e
+        echo "Generating code..."
+
+        # Run deepcopy code generator
+        # TEMPLATE: Update module path and API package name
+        go run k8s.io/code-generator/cmd/deepcopy-gen \
+          --go-header-file hack/boilerplate.go.txt \
+          --output-file zz_generated.deepcopy.go \
+          --bounding-dirs github.com/example-org/example-service/pkg/apis \
+          github.com/example-org/example-service/pkg/apis/example-service/v1alpha1
+
+        echo "✅ Code generation complete"
+    silent: true
+
+  # Test tasks
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test -v ./...
+
+  # Cleanup tasks
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.TOOL_DIR}}
+      - rm -rf .task
+      - echo "✅ Cleaned build artifacts"
+    silent: true
+
+  # Format and lint
+  fmt:
+    desc: Format Go code
+    cmds:
+      - go fmt ./...
+      - echo "✅ Code formatted"
+    silent: true
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+      - echo "✅ Vet complete"
+    silent: true

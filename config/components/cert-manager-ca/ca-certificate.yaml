@@ -1,0 +1,21 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: example-service-ca
+spec:
+  isCA: true
+  secretName: example-service-ca-secret
+  duration: 87600h  # 10 years
+  renewBefore: 8760h  # 1 year before expiration
+  subject:
+    organizations:
+      - example-org  # TEMPLATE NOTE: Change to your organization
+  commonName: Example Service Internal CA
+  # Use a self-signed issuer to bootstrap the CA
+  # This should reference an existing cluster-wide self-signed issuer
+  issuerRef:
+    name: selfsigned-cluster-issuer
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: RSA
+    size: 4096

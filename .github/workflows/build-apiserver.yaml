@@ -1,0 +1,51 @@
+# TEMPLATE NOTE: This workflow is specific to datum-cloud organization.
+# Update or replace this workflow based on your CI/CD needs.
+# Key things to change:
+# - image-name: Update to your service name
+# - bundle-name: Update to your kustomize bundle name
+# - Uses references: Point to your own reusable workflows or use standard actions
+
+name: Build and Publish Docker Image
+
+on:
+  push:
+  release:
+    types: ["published"]
+
+jobs:
+  validate-kustomize:
+    uses: datum-cloud/actions/.github/workflows/validate-kustomize.yaml@v1.9.0
+
+  publish-container-image:
+    # No point in trying to build the container image if the deployment
+    # manifests are invalid.
+    needs:
+      - validate-kustomize
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+      attestations: write
+    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1.9.0
+    with:
+      image-name: example-service  # TEMPLATE: Change to your service name
+    secrets: inherit
+
+  publish-kustomize-bundles:
+    # Ensure the kustomize manifests are valid and the container is published
+    # before we publish the kustomize manifests. We expect publishing the
+    # kustomize manifests to result in new deployments going out.
+    needs:
+      - validate-kustomize
+      - publish-container-image
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    uses: datum-cloud/actions/.github/workflows/publish-kustomize-bundle.yaml@v1.9.0
+    with:
+      bundle-name: ghcr.io/example-org/example-service-kustomize  # TEMPLATE: Update org/name
+      bundle-path: config
+      image-overlays: config/base
+      image-name: ghcr.io/example-org/example-service  # TEMPLATE: Update org/name
+    secrets: inherit
