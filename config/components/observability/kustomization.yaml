@@ -3,4 +3,4 @@ kind: Component
 
 resources:
   # ServiceMonitors for metrics collection
-  - servicemonitors/example-service-apiserver-servicemonitor.yaml
+  - servicemonitors/search-apiserver-servicemonitor.yaml

@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: example-service-apiserver
+  name: search-apiserver
 rules:
 # Allow reading extension-apiserver-authentication configmap for authentication
 - apiGroups: [""]
@@ -20,11 +20,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: example-service-apiserver
+  name: search-apiserver
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: example-service-apiserver
+  name: search-apiserver
 subjects:
 - kind: ServiceAccount
-  name: example-service-apiserver
+  name: search-apiserver

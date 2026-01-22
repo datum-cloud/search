@@ -1,11 +1,8 @@
 version: '3'
 
-# TEMPLATE NOTE: Update these variables for your service:
-# - IMAGE_NAME: Change to your container registry and image name
-# - Update all references to "example-service" throughout this file
 vars:
   TOOL_DIR: "{{.USER_WORKING_DIR}}/bin"
-  IMAGE_NAME: "ghcr.io/example-org/example-service"  # TEMPLATE: Change to your registry/image
+  IMAGE_NAME: "ghcr.io/datum-cloud/search"
   IMAGE_TAG: "dev"
 
 tasks:
@@ -18,11 +15,10 @@ tasks:
   # Build tasks
   build:
     desc: Build the search binary
-    # TEMPLATE NOTE: Update the ldflags to use your module path
     cmds:
       - |
         set -e
-        echo "Building example-service..."
+        echo "Building search..."
         mkdir -p {{.TOOL_DIR}}
 
         # Get git information for version injection
@@ -36,14 +32,13 @@ tasks:
 
         echo "Version: ${VERSION}, Commit: ${GIT_COMMIT:0:7}, Tree: ${GIT_TREE_STATE}"
 
-        # TEMPLATE: Update module path and binary name
         go build \
-          -ldflags="-X 'github.com/example-org/example-service/internal/version.Version=${VERSION}' \
-                    -X 'github.com/example-org/example-service/internal/version.GitCommit=${GIT_COMMIT}' \
-                    -X 'github.com/example-org/example-service/internal/version.GitTreeState=${GIT_TREE_STATE}' \
-                    -X 'github.com/example-org/example-service/internal/version.BuildDate=${BUILD_DATE}'" \
-          -o {{.TOOL_DIR}}/example-service ./cmd/example-service
-        echo "✅ Binary built: {{.TOOL_DIR}}/example-service"
+          -ldflags="-X 'go.datum.net/search/internal/version.Version=${VERSION}' \
+                    -X 'go.datum.net/search/internal/version.GitCommit=${GIT_COMMIT}' \
+                    -X 'go.datum.net/search/internal/version.GitTreeState=${GIT_TREE_STATE}' \
+                    -X 'go.datum.net/search/internal/version.BuildDate=${BUILD_DATE}'" \
+          -o {{.TOOL_DIR}}/search ./cmd/search
+        echo "✅ Binary built: {{.TOOL_DIR}}/search"
     silent: true
 
   # Development tasks
@@ -77,19 +72,17 @@ tasks:
   # Code generation tasks
   generate:
     desc: Generate deepcopy and client code
-    # TEMPLATE NOTE: Update the package path to match your module and API group
     cmds:
       - |
         set -e
         echo "Generating code..."
 
-        # Run deepcopy code generator
-        # TEMPLATE: Update module path and API package name
+        # Run code generators
         go run k8s.io/code-generator/cmd/deepcopy-gen \
           --go-header-file hack/boilerplate.go.txt \
           --output-file zz_generated.deepcopy.go \
-          --bounding-dirs github.com/example-org/example-service/pkg/apis \
-          github.com/example-org/example-service/pkg/apis/example-service/v1alpha1
+          --bounding-dirs go.datum.net/search/pkg/apis \
+          go.datum.net/search/pkg/apis/search/v1alpha1
 
         echo "✅ Code generation complete"
     silent: true

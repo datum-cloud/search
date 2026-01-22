@@ -2,16 +2,16 @@
 # Milo provides IAM capabilities for Kubernetes APIs
 # See https://github.com/datum-cloud/milo for more information
 #
-# This ProtectedResource grants permissions for ExampleResource objects
+# This ProtectedResource grants permissions for SearchQuery objects
 apiVersion: iam.miloapis.com/v1alpha1
 kind: ProtectedResource
 metadata:
-  name: example.example-org.io-exampleresources
+  name: search.miloapis.com-searchqueries
 spec:
   serviceRef:
-    name: "example.example-org.io"
-  kind: ExampleResource
-  plural: exampleresources
+    name: "search.miloapis.com"
+  kind: SearchQuery
+  plural: searchqueries
   singular: exampleresource
   permissions:
     - create

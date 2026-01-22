@@ -4,7 +4,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 
-	"github.com/example-org/example-service/pkg/apis/example-service/v1alpha1"
+	"go.datum.net/search/pkg/apis/search/v1alpha1"
 )
 
 // Install registers the API group and adds types to a scheme

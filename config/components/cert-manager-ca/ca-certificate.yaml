@@ -1,16 +1,16 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: example-service-ca
+  name: search-ca
 spec:
   isCA: true
-  secretName: example-service-ca-secret
+  secretName: search-ca-secret
   duration: 87600h  # 10 years
   renewBefore: 8760h  # 1 year before expiration
   subject:
     organizations:
-      - example-org  # TEMPLATE NOTE: Change to your organization
-  commonName: Example Service Internal CA
+      - datum-cloud
+  commonName: Search Service Internal CA
   # Use a self-signed issuer to bootstrap the CA
   # This should reference an existing cluster-wide self-signed issuer
   issuerRef:

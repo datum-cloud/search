@@ -8,4 +8,4 @@ patches:
   - path: deployment-patch.yaml
     target:
       kind: Deployment
-      name: example-service-apiserver
+      name: search-apiserver

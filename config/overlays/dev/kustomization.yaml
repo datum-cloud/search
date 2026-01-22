@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: example-system
+namespace: search-system
 
 resources:
   - ../../base
@@ -16,5 +16,5 @@ components:
 
 # Override image tag for dev builds
 images:
-  - name: ghcr.io/example-org/example-service
+  - name: ghcr.io/datum-cloud/search
     newTag: dev

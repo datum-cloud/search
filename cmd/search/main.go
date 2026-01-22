@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	searchapiserver "github.com/example-org/example-service/internal/apiserver"
-	"github.com/example-org/example-service/internal/version"
-	"github.com/example-org/example-service/pkg/generated/openapi"
+	searchapiserver "go.datum.net/search/internal/apiserver"
+	"go.datum.net/search/internal/version"
+	"go.datum.net/search/pkg/generated/openapi"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	apiopenapi "k8s.io/apiserver/pkg/endpoints/openapi"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -32,22 +32,20 @@ func init() {
 }
 
 func main() {
-	cmd := NewExampleServiceServerCommand()
+	cmd := NewSearchServerCommand()
 	code := cli.Run(cmd)
 	os.Exit(code)
 }
 
-// NewExampleServiceServerCommand creates the root command with subcommands for the search server.
-//
-// TEMPLATE NOTE: Rename this function and update the cobra.Command to match your service name.
-func NewExampleServiceServerCommand() *cobra.Command {
+// NewSearchServerCommand creates the root command with subcommands for the search server.
+func NewSearchServerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search",
-		Short: "ExampleService - generic aggregated API server",
-		Long: `ExampleService is a generic Kubernetes aggregated API server that can be extended
+		Short: "Search - generic aggregated API server",
+		Long: `Search is a generic Kubernetes aggregated API server that can be extended
 with custom search implementations.
 
-Exposes ExampleResource resources accessible through kubectl or any Kubernetes client.`,
+Exposes SearchQuery resources accessible through kubectl or any Kubernetes client.`,
 	}
 
 	cmd.AddCommand(NewServeCommand())
@@ -58,14 +56,14 @@ Exposes ExampleResource resources accessible through kubectl or any Kubernetes c
 
 // NewServeCommand creates the serve subcommand that starts the API server.
 func NewServeCommand() *cobra.Command {
-	options := NewExampleServiceServerOptions()
+	options := NewSearchServerOptions()
 
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the API server",
 		Long: `Start the API server and begin serving requests.
 
-Exposes ExampleResource resources through kubectl.`,
+Exposes SearchQuery resources through kubectl.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := options.Complete(); err != nil {
 				return err
@@ -94,7 +92,7 @@ func NewVersionCommand() *cobra.Command {
 		Long:  `Show the version, git commit, and build details.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			info := version.Get()
-			fmt.Printf("ExampleService Server\n")
+			fmt.Printf("Search Server\n")
 			fmt.Printf("  Version:       %s\n", info.Version)
 			fmt.Printf("  Git Commit:    %s\n", info.GitCommit)
 			fmt.Printf("  Git Tree:      %s\n", info.GitTreeState)
@@ -108,21 +106,17 @@ func NewVersionCommand() *cobra.Command {
 	return cmd
 }
 
-// ExampleServiceServerOptions contains configuration for the search server.
-//
-// TEMPLATE NOTE: Rename this type to match your service.
-// Add custom configuration fields here as needed.
-type ExampleServiceServerOptions struct {
+// SearchServerOptions contains configuration for the search server.
+type SearchServerOptions struct {
 	RecommendedOptions *options.RecommendedOptions
 	Logs               *logsapi.LoggingConfiguration
-	// Add your custom options here
 }
 
-// NewExampleServiceServerOptions creates options with default values.
-func NewExampleServiceServerOptions() *ExampleServiceServerOptions {
-	o := &ExampleServiceServerOptions{
+// NewSearchServerOptions creates options with default values.
+func NewSearchServerOptions() *SearchServerOptions {
+	o := &SearchServerOptions{
 		RecommendedOptions: options.NewRecommendedOptions(
-			"/registry/example.example-org.io", // TEMPLATE NOTE: Change this to your API group
+			"/registry/search.miloapis.com",
 			searchapiserver.Codecs.LegacyCodec(searchapiserver.Scheme.PrioritizedVersionsAllGroups()...),
 		),
 		Logs: logsapi.NewLoggingConfiguration(),
@@ -137,22 +131,22 @@ func NewExampleServiceServerOptions() *ExampleServiceServerOptions {
 	return o
 }
 
-func (o *ExampleServiceServerOptions) AddFlags(fs *pflag.FlagSet) {
+func (o *SearchServerOptions) AddFlags(fs *pflag.FlagSet) {
 	o.RecommendedOptions.AddFlags(fs)
 }
 
-func (o *ExampleServiceServerOptions) Complete() error {
+func (o *SearchServerOptions) Complete() error {
 	return nil
 }
 
 // Validate ensures required configuration is provided.
-func (o *ExampleServiceServerOptions) Validate() error {
+func (o *SearchServerOptions) Validate() error {
 	// Add validation as needed
 	return nil
 }
 
 // Config builds the complete server configuration from options.
-func (o *ExampleServiceServerOptions) Config() (*searchapiserver.Config, error) {
+func (o *SearchServerOptions) Config() (*searchapiserver.Config, error) {
 	if err := o.RecommendedOptions.SecureServing.MaybeDefaultWithSelfSignedCerts(
 		"localhost", nil, nil); err != nil {
 		return nil, fmt.Errorf("error creating self-signed certificates: %v", err)
@@ -165,12 +159,12 @@ func (o *ExampleServiceServerOptions) Config() (*searchapiserver.Config, error) 
 
 	namer := apiopenapi.NewDefinitionNamer(searchapiserver.Scheme)
 	genericConfig.OpenAPIV3Config = genericapiserver.DefaultOpenAPIV3Config(openapi.GetOpenAPIDefinitions, namer)
-	genericConfig.OpenAPIV3Config.Info.Title = "ExampleService"
+	genericConfig.OpenAPIV3Config.Info.Title = "Search"
 	genericConfig.OpenAPIV3Config.Info.Version = version.Version
 
 	// Configure OpenAPI v2
 	genericConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(openapi.GetOpenAPIDefinitions, namer)
-	genericConfig.OpenAPIConfig.Info.Title = "ExampleService"
+	genericConfig.OpenAPIConfig.Info.Title = "Search"
 	genericConfig.OpenAPIConfig.Info.Version = version.Version
 
 	if err := o.RecommendedOptions.ApplyTo(genericConfig); err != nil {
@@ -186,7 +180,7 @@ func (o *ExampleServiceServerOptions) Config() (*searchapiserver.Config, error) 
 }
 
 // Run initializes and starts the server.
-func Run(options *ExampleServiceServerOptions, ctx context.Context) error {
+func Run(options *SearchServerOptions, ctx context.Context) error {
 	if err := logsapi.ValidateAndApply(options.Logs, utilfeature.DefaultMutableFeatureGate); err != nil {
 		return fmt.Errorf("failed to apply logging configuration: %w", err)
 	}
@@ -203,7 +197,7 @@ func Run(options *ExampleServiceServerOptions, ctx context.Context) error {
 
 	defer logs.FlushLogs()
 
-	klog.Info("Starting ExampleService server...")
+	klog.Info("Starting Search server...")
 	klog.Info("Metrics available at https://<server-address>/metrics")
 	return server.Run(ctx)
 }
