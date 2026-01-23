@@ -1,0 +1,27 @@
+@startuml SearchServiceContainers
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Person(platformUser, "Platform User", "An operator who needs to query and locate platform resources")
+
+System_Ext(platformAPI, "Platform API", "Manages cluster resources and provides aggregation layer for custom APIs")
+System_Ext(eventBus, "Event Streaming", "Event stream of audit logs collected from the apiserver")
+
+System_Boundary(searchService, "Search Service") {
+    Container(searchAPI, "Search APIServer", "Go, Kubernetes API Server Framework", "Provides a platform native API for searching resources")
+    Container(indexerService, "Resource Indexer", "Go", "Indexes platform resources based on index policies")
+    Container(controllerManager, "Controller Manager", "Go, Kubernetes Controller", "Manages index policies in the search service")
+    System(indexBackend, "Index Backend Storage", "High-performance full-text search engine for indexed resources")
+    System(etcd, "etcd", "Strongly consistent, distributed key-value store for storing metadata")
+}
+
+Rel_D(platformUser, searchAPI, "Submits search queries and manages index policies", "HTTPS/JSON/UI")
+Rel(searchAPI, indexBackend, "Executes search queries", "HTTPS/JSON")
+Rel_L(controllerManager, searchAPI, "Watches search resources", "HTTPS/Watch API")
+Rel_L(searchAPI, etcd, "Stores control plane resources in", "gRPC")
+Rel_L(indexerService, eventBus, "Consumes events from", "NATS Protocol")
+Rel_U(indexerService, searchAPI, "Retrieves index policies from", "HTTPS")
+Rel_D(platformAPI, eventBus, "Sends audit log events to", "HTTPS")
+Rel_R(indexerService, platformAPI, "Bootstraps indexes from resources in", "HTTPS")
+Rel_R(indexerService, indexBackend, "Writes indexed documents", "HTTPS/JSON")
+
+@enduml
