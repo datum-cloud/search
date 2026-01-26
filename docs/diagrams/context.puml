@@ -1,0 +1,20 @@
+@startuml SearchServiceContext
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+left to right direction
+
+Person(platformUser, "Platform User", "An operator who needs to query and locate platform resources")
+
+System(searchService, "Search Service", "Provides advanced resource discovery through field filtering and full-text search of platform resources")
+
+System_Ext(platformAPI, "Platform API", "Manages core resources, authn, authz, and provides aggregation layer for custom APIs")
+System_Ext(eventStream, "Event Streaming System", "Streams audit log events from the platform API")
+
+Rel_R(platformUser, searchService, "Searches resources using CLI, UI, or API clients", "HTTPS/JSON")
+Rel(platformUser, platformAPI, "Manages platform resources", "kubectl/HTTPS")
+
+Rel_D(searchService, platformAPI, "Indexes resources from", "HTTPS")
+Rel(searchService, eventStream, "Subscribes to audit log events", "NATS Protocol")
+Rel(platformAPI, eventStream, "Publishes audit logs to")
+
+@enduml
