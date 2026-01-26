@@ -1,0 +1,31 @@
+@startuml ResourceIndexerScaling
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+System_Ext(jetstream, "NATS JetStream", "Audit log event stream aggregated from all control planes")
+
+System_Boundary(indexerGroup, "Queue Group: resource-indexer") {
+    Container(indexer1, "Indexer #1", "Go", "Policy matching, CEL filtering, batch writes")
+    Container(indexer2, "Indexer #2", "Go", "Policy matching, CEL filtering, batch writes")
+    Container(indexer3, "Indexer #3", "Go", "Policy matching, CEL filtering, batch writes")
+}
+
+note right of indexerGroup
+  Each event delivered to
+  exactly one instance —
+  scales linearly without
+  coordination
+end note
+
+System_Ext(meilisearch, "Meilisearch", "Persistent search index")
+
+Rel_D(jetstream, indexer1, "Distributes event", "NATS")
+Rel_D(jetstream, indexer2, "Distributes event", "NATS")
+Rel_D(jetstream, indexer3, "Distributes event", "NATS")
+
+Rel_D(indexer1, meilisearch, "Batched upserts/deletes", "HTTPS")
+Rel_D(indexer2, meilisearch, "Batched upserts/deletes", "HTTPS")
+Rel_D(indexer3, meilisearch, "Batched upserts/deletes", "HTTPS")
+
+SHOW_LEGEND()
+
+@enduml
