@@ -29,6 +29,8 @@ The Search API will initially offer these new API resources to end-users:
   indexed and which fields within the resource are applicable to indexing
 - **ResourceSearchQuery** allows users to execute field filtering and full-text
   searching capabilities across all indexed resources
+- **ResourceFacetQuery** allows users to retrieve facet counts for building
+  filter UIs, independent of search results
 
 
 > [!IMPORTANT]
@@ -40,6 +42,13 @@ The Search API will initially offer these new API resources to end-users:
 > This service will be made multi-tenant friendly in the future.
 
 ## Design Details
+
+> [!NOTE]
+>
+> The search service is eventually consistent. Resources are indexed
+> asynchronously, so search results may not immediately reflect changes made in
+> the control plane. Recently created, updated, or deleted resources may take a
+> short time to appear in or disappear from search results.
 
 ### Resource index policies
 
@@ -146,3 +155,208 @@ Conditions are re-evaluated when resources change. If a resource no longer
 satisfies any condition (e.g., it transitions from Ready to NotReady), it will
 be removed from the search index. Similarly, resources that begin satisfying
 a condition after an update will be added to the index.
+
+### Resource search queries
+
+The `ResourceSearchQuery` resource allows users to execute searches across all
+indexed resources, combining full-text search with field-based filtering.
+
+**Full-text search** (the `query` field) performs relevance-based matching across
+all fields marked as `searchable` in the applicable index policies. The search
+service tokenizes and analyzes both the query string and field values, enabling
+matches even when terms appear in different order or with slight variations.
+Results are ranked by relevance—resources that better match the query appear
+first, and each result includes a `relevanceScore` (0 to 1) indicating match
+quality. For example, searching "nginx frontend" would match resources containing
+both terms, with resources where these terms appear prominently ranked higher.
+
+**Filters** (the `filters` field) perform exact, structured matching on fields
+marked as `filterable`. Unlike full-text search, filters are binary—a resource
+either matches or it doesn't. Filters don't affect relevance ranking; they simply
+include or exclude resources from the result set. Use filters for precise
+criteria like `metadata.namespace == "production"` or `spec.replicas >= 3`.
+
+When both `query` and `filters` are specified, the search service first applies
+filters to narrow the candidate set, then performs full-text search within that
+set. This allows queries like "find resources matching 'nginx' that are in
+production with at least 2 replicas."
+
+```yaml
+apiVersion: search.miloapis.com/v1alpha1
+kind: ResourceSearchQuery
+metadata:
+  name: find-production-deployments
+spec:
+  # Full-text search string. Searches all fields marked as searchable in the
+  # applicable index policies.
+  query: "nginx frontend"
+
+  # CEL expressions for field-based filtering. Only fields marked as filterable
+  # can be used. Each expression supports full boolean logic (&&, ||). Multiple
+  # filters are combined with OR logic.
+  filters:
+    - # Identifier for the filter. Used in error messages and for documentation.
+      name: prod-high-replica
+      # CEL expression that must evaluate to a boolean.
+      expression: 'metadata.namespace == "production" && spec.replicas >= 2'
+    - name: staging-any
+      expression: 'metadata.namespace == "staging"'
+
+  # Limit search to specific resource types. When empty, searches all indexed
+  # resource types.
+  resourceTypes:
+    - group: apps
+      kind: Deployment
+
+  # Maximum results per page (default: 10, max: 100).
+  limit: 25
+
+  # Pagination cursor from a previous query response.
+  continue: ""
+
+  # Explicit sort ordering. When omitted, results are ordered by relevance
+  # score for full-text queries.
+  sort:
+    # Field path to sort by (must be marked as filterable).
+    field: metadata.creationTimestamp
+    # Sort direction, either "asc" or "desc".
+    order: desc
+
+status:
+  # Array of matched resources. Each result contains the full resource object
+  # as it exists in the cluster.
+  results:
+    - # The full matched resource object.
+      resource:
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: nginx-frontend
+          namespace: production
+        # ... full resource
+      # Relevance score from 0 to 1, where higher values indicate better matches.
+      # Only present when query is specified. Results are sorted by this score
+      # descending unless explicit sort ordering is specified.
+      relevanceScore: 0.92
+
+  # Pagination cursor for the next page. Present only when more results exist.
+  # Pass this value to the continue field in a subsequent query to fetch the
+  # next page.
+  continue: "eyJvZmZzZXQiOjI1fQ=="
+
+  # Approximate total number of matching resources across all pages. This is
+  # an estimate and may change as resources are added or removed.
+  estimatedTotalHits: 142
+```
+
+#### Supported filter operations
+
+Each filter expression accepts CEL syntax with the following supported
+operations:
+
+| Operation | Example |
+|-----------|---------|
+| Equality | `metadata.namespace == "production"` |
+| Inequality | `metadata.namespace != "default"` |
+| Comparison | `spec.replicas >= 2` |
+| List membership | `metadata.namespace in ["prod", "staging"]` |
+| Prefix | `metadata.name.startsWith("api-")` |
+| Substring | `metadata.name.contains("api")` |
+| Field existence | `has(metadata.annotations["description"])` |
+| AND | `expr1 && expr2` |
+| OR | `expr1 \|\| expr2` |
+| Grouping | `(expr1 \|\| expr2) && expr3` |
+
+### Resource facet queries
+
+Facets provide aggregated counts of unique values for specified fields across
+matching resources. When you request a facet on a field like `metadata.namespace`,
+the search service returns each unique namespace along with the number of
+resources in that namespace. For example, faceting on `metadata.namespace` and
+`kind` might return:
+
+```
+Namespace                Kind
+├── production (89)      ├── Deployment (78)
+├── staging (42)         ├── Service (64)
+└── development (11)     └── ConfigMap (23)
+```
+
+This enables building dynamic filter interfaces that show users what options
+exist, how many results each option returns, and which filters would return no
+results. Facets are computed against the filtered result set—if a user has
+already filtered to `kind = Deployment`, the namespace facet counts will reflect
+only Deployments.
+
+The `ResourceFacetQuery` resource retrieves facet counts independently from
+search results. This separation allows populating filter UIs before a user has
+entered a search query, building browse interfaces that show category breakdowns
+without individual results, or fetching facets separately for performance.
+
+```yaml
+apiVersion: search.miloapis.com/v1alpha1
+kind: ResourceFacetQuery
+metadata:
+  name: explore-deployments
+spec:
+  # CEL expressions for scoping facet computation. Only fields marked as
+  # filterable can be used. Each expression supports full boolean logic (&&, ||).
+  # Multiple filters are combined with OR logic.
+  filters:
+    - # CEL expression that must evaluate to a boolean.
+      expression: 'metadata.namespace == "production"'
+
+  # Limit facet computation to specific resource types. When empty, computes
+  # facets across all indexed resource types.
+  resourceTypes:
+    - group: apps
+      kind: Deployment
+
+  # Fields to compute facets for. Only fields marked as facetable in the
+  # applicable index policies can be used.
+  facets:
+    - # The field path to aggregate on.
+      field: metadata.namespace
+    - field: metadata.labels["app"]
+      # Maximum number of unique values to return (default: 10).
+      limit: 20
+    - field: kind
+
+status:
+  # Array of facet results, one per requested facet field. Order matches the
+  # request. Each facet contains value/count pairs sorted by count descending.
+  # The response includes only the top N values per field (controlled by limit).
+  facets:
+    - # The field path that was aggregated.
+      field: metadata.namespace
+      # Array of unique values and their counts.
+      values:
+        - # The unique field value.
+          value: production
+          # Number of matching resources with this value.
+          count: 89
+        - value: staging
+          count: 42
+        - value: development
+          count: 11
+    - field: metadata.labels["app"]
+      values:
+        - value: nginx
+          count: 34
+        - value: redis
+          count: 28
+    - field: kind
+      values:
+        - value: Deployment
+          count: 78
+        - value: Service
+          count: 64
+```
+
+### Future considerations
+
+The following features may be added in future versions:
+
+- **Highlighting**: Return matched terms with highlight markers for display
+- **Disjunctive facets**: Option in `ResourceFacetQuery` to compute facet counts
+  as if that facet's filter was not applied, enabling multi-select filter UIs
