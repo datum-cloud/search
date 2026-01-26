@@ -11,9 +11,9 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/klog/v2"
 
-	_ "go.datum.net/search/internal/metrics"
-	"go.datum.net/search/pkg/apis/search/install"
-	"go.datum.net/search/pkg/apis/search/v1alpha1"
+	_ "go.miloapis.net/search/internal/metrics"
+	"go.miloapis.net/search/pkg/apis/search/install"
+	"go.miloapis.net/search/pkg/apis/search/v1alpha1"
 )
 
 var (
