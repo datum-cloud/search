@@ -23,10 +23,10 @@ COPY internal/ internal/
 
 # Build the binary with Search-specific version information
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-X 'go.datum.net/search/internal/version.Version=${VERSION}' \
-              -X 'go.datum.net/search/internal/version.GitCommit=${GIT_COMMIT}' \
-              -X 'go.datum.net/search/internal/version.GitTreeState=${GIT_TREE_STATE}' \
-              -X 'go.datum.net/search/internal/version.BuildDate=${BUILD_DATE}'" \
+    -ldflags="-X 'go.miloapis.net/search/internal/version.Version=${VERSION}' \
+              -X 'go.miloapis.net/search/internal/version.GitCommit=${GIT_COMMIT}' \
+              -X 'go.miloapis.net/search/internal/version.GitTreeState=${GIT_TREE_STATE}' \
+              -X 'go.miloapis.net/search/internal/version.BuildDate=${BUILD_DATE}'" \
     -a -o search ./cmd/search
 
 # Runtime stage

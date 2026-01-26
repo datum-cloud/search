@@ -1,4 +1,4 @@
-module go.datum.net/search
+module go.miloapis.net/search
 
 go 1.25.0
 

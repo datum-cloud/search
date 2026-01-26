@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	searchapiserver "go.datum.net/search/internal/apiserver"
-	"go.datum.net/search/internal/version"
-	"go.datum.net/search/pkg/generated/openapi"
+	searchapiserver "go.miloapis.net/search/internal/apiserver"
+	"go.miloapis.net/search/internal/version"
+	"go.miloapis.net/search/pkg/generated/openapi"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	apiopenapi "k8s.io/apiserver/pkg/endpoints/openapi"
 	genericapiserver "k8s.io/apiserver/pkg/server"

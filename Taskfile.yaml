@@ -38,10 +38,10 @@ tasks:
         echo "Version: ${VERSION}, Commit: ${GIT_COMMIT:0:7}, Tree: ${GIT_TREE_STATE}"
 
         go build \
-          -ldflags="-X 'go.datum.net/search/internal/version.Version=${VERSION}' \
-                    -X 'go.datum.net/search/internal/version.GitCommit=${GIT_COMMIT}' \
-                    -X 'go.datum.net/search/internal/version.GitTreeState=${GIT_TREE_STATE}' \
-                    -X 'go.datum.net/search/internal/version.BuildDate=${BUILD_DATE}'" \
+          -ldflags="-X 'go.miloapis.net/search/internal/version.Version=${VERSION}' \
+                    -X 'go.miloapis.net/search/internal/version.GitCommit=${GIT_COMMIT}' \
+                    -X 'go.miloapis.net/search/internal/version.GitTreeState=${GIT_TREE_STATE}' \
+                    -X 'go.miloapis.net/search/internal/version.BuildDate=${BUILD_DATE}'" \
           -o {{.TOOL_DIR}}/search ./cmd/search
         echo "✅ Binary built: {{.TOOL_DIR}}/search"
     silent: true
@@ -88,8 +88,8 @@ tasks:
         go run k8s.io/code-generator/cmd/deepcopy-gen \
           --go-header-file hack/boilerplate.go.txt \
           --output-file zz_generated.deepcopy.go \
-          --bounding-dirs go.datum.net/search/pkg/apis \
-          go.datum.net/search/pkg/apis/search/v1alpha1
+          --bounding-dirs go.miloapis.net/search/pkg/apis \
+          go.miloapis.net/search/pkg/apis/search/v1alpha1
 
         echo "✅ Code generation complete"
     silent: true
