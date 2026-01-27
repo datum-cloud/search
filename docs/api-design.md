@@ -61,25 +61,88 @@ kind: ResourceIndexPolicy
 metadata:
   name: organizations
 spec:
+  # Identifies the resource type this policy applies to. Uses a versioned
+  # reference since field paths may differ between API versions.
   targetResource:
     group: resourcemanager.miloapis.com
     version: v1alpha1
     kind: Organization
+
+  # CEL expressions that filter which resources are indexed. Multiple
+  # conditions can be specified and are evaluated with OR semantics - a
+  # resource is indexed if it satisfies ANY condition. Use && within a
+  # single expression to require multiple criteria together.
+  #
+  # Each condition has:
+  # - name: A unique identifier for the condition, used in status reporting
+  #   and debugging to identify which condition(s) matched a resource.
+  # - expression: A CEL expression that must evaluate to a boolean. The
+  #   resource is available as the root object in the expression context.
+  #
+  # Available CEL operations:
+  # - Field access: spec.replicas, metadata.name, status.phase
+  # - Map access: metadata.labels["app"], metadata.annotations["key"]
+  # - Comparisons: ==, !=, <, <=, >, >=
+  # - Logical operators: &&, ||, !
+  # - String functions: contains(), startsWith(), endsWith(), matches()
+  # - List functions: exists(), all(), size(), map(), filter()
+  # - Membership: "value" in list, "key" in map
+  # - Ternary: condition ? trueValue : falseValue
   conditions:
-    # Only index organizations that are active
-    - name: ready-only
-      expression: status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')
+    # Index resources that are ready and not being deleted
+    - name: active-resources
+      expression: |
+        status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')
+        && !has(metadata.deletionTimestamp)
+    # Also index resources in production namespaces regardless of status
+    - name: production-resources
+      expression: metadata.namespace.startsWith("prod-")
+
+  # Defines which fields from the resource are indexed and how they behave
+  # in search operations.
   fields:
-    # Index the resource name
+    # The JSONPath to the field value in the resource. Supports nested paths
+    # and map key access using bracket notation.
     - path: metadata.name
+      # When true, the field value is included in full-text search operations.
+      # The value is tokenized and analyzed for relevance-based matching.
       searchable: true
+      # When true, the field can be used in filter expressions for exact
+      # matching, range queries, and other structured filtering operations.
       filterable: true
-    # Index the description of the resource
+      # When true, the search service will return aggregated counts of unique
+      # values for this field. Enables clients to discover available filter
+      # values and build faceted navigation interfaces.
+      facetable: true
+
     - path: metadata.annotations["kubernetes.io/description"]
       searchable: true
       filterable: true
+      facetable: false
 ```
 
 The index policy will used a versioned reference to resources since the field
 paths for resources may be different between versions. The system should monitor
 for deprecated resource versions being referenced in index policies.
+
+#### Condition evaluation
+
+Conditions provide fine-grained control over which resource instances are
+indexed. When multiple conditions are specified, they are evaluated using OR
+semantics - a resource is indexed if it satisfies ANY condition. This allows
+defining multiple independent criteria for inclusion.
+
+Use `&&` within a single CEL expression when you need AND semantics:
+
+```yaml
+conditions:
+  - name: ready-in-production
+    expression: |
+      status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')
+      && metadata.namespace.startsWith("prod-")
+```
+
+Conditions are re-evaluated when resources change. If a resource no longer
+satisfies any condition (e.g., it transitions from Ready to NotReady), it will
+be removed from the search index. Similarly, resources that begin satisfying
+a condition after an update will be added to the index.
