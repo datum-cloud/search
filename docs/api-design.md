@@ -158,6 +158,12 @@ a condition after an update will be added to the index.
 
 ### Resource search queries
 
+> [!NOTE]
+>
+> Field filtering and facets are advanced functionality and represent a
+> forward-looking design. The initial release of the search service will target
+> full-text searching only.
+
 The `ResourceSearchQuery` resource allows users to execute searches across all
 indexed resources, combining full-text search with field-based filtering.
 
