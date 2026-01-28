@@ -203,7 +203,9 @@ spec:
       expression: 'metadata.namespace == "staging"'
 
   # Limit search to specific resource types. When empty, searches all indexed
-  # resource types.
+  # resource types but only full-text search is allowed (no filters or sort).
+  # When specified, filters and sort fields must be configured in all applicable
+  # index policies.
   resourceTypes:
     - group: apps
       kind: Deployment
@@ -248,6 +250,34 @@ status:
   # an estimate and may change as resources are added or removed.
   estimatedTotalHits: 142
 ```
+
+#### Field validation
+
+Fields used in filters, sorting, and facets are validated against the
+`ResourceIndexPolicy` for each requested resource type:
+
+| Query Scope | Validation Behavior |
+|-------------|---------------------|
+| All resources (`resourceTypes` empty) | Full-text search only; filters, sort, and facets are rejected |
+| Explicit resource types | Fields must be configured in **all** applicable policies |
+
+When multiple resource types are specified, field validation uses the
+**intersection** of field configurations. A field must be marked appropriately
+(filterable, sortable, or facetable) in every policy to be usable:
+
+```
+resourceTypes: [Deployments, Services]
+
+Policy for Deployments: metadata.name (filterable), spec.replicas (filterable)
+Policy for Services:    metadata.name (filterable), spec.type (filterable)
+
+Allowed filter fields: metadata.name (common to both)
+Rejected: spec.replicas, spec.type (not in all policies)
+```
+
+This ensures filters apply uniformly to all results rather than being silently
+ignored for some resource types. To filter on resource-specific fields, query
+that resource type individually.
 
 #### Supported filter operations
 
@@ -306,8 +336,9 @@ spec:
     - # CEL expression that must evaluate to a boolean.
       expression: 'metadata.namespace == "production"'
 
-  # Limit facet computation to specific resource types. When empty, computes
-  # facets across all indexed resource types.
+  # Scope facet computation to specific resource types. Required when using
+  # filters or facets on fields other than built-in metadata. When specified,
+  # filter and facet fields must be configured in all applicable index policies.
   resourceTypes:
     - group: apps
       kind: Deployment
