@@ -125,6 +125,12 @@ The index policy will used a versioned reference to resources since the field
 paths for resources may be different between versions. The system should monitor
 for deprecated resource versions being referenced in index policies.
 
+> [!NOTE]
+>
+> The `filterable` and `facteable` options are forward looking options that will
+> be added to the search service in a future release. The primary functionality
+> we will target for launch is **full-text searching**.
+
 #### Condition evaluation
 
 Conditions provide fine-grained control over which resource instances are
