@@ -48,9 +48,12 @@ using powerful indexing and real-time event processing.
 - Filter events based on active index policies
 - Evaluate [CEL expressions][CEL] for conditional indexing
 - Extract and transform resource data for indexing
-- Write to index backend with proper error handling and retries
+- Manage documents in index backend with proper error handling and retries
 - Manage index lifecycle (creation, updates, deletion)
 - Bootstrap indexes from existing state
+
+See the [Resource Indexer Architecture](./components/resource-indexer.md) for
+detailed design documentation.
 
 ### Controller Manager
 

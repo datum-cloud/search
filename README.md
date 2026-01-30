@@ -8,3 +8,10 @@ using CEL-based filtering. The service integrates natively with kubectl/RBAC and
 targets Meilisearch as the search backend.
 
 ![](./docs/diagrams/SearchServiceContext.png)
+
+## Documentation
+
+- [Architecture](./docs/architecture.md) — High-level design and component
+  overview
+- [Resource Indexer](./docs/components/resource-indexer.md) — Detailed design
+  for the indexing component
