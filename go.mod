@@ -10,7 +10,7 @@ require (
 	k8s.io/apiserver v0.34.2
 	k8s.io/component-base v0.34.3
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e
+	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4
 )
 
 require (
