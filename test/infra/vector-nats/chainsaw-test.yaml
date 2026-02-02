@@ -1,0 +1,104 @@
+# Chainsaw E2E Test: Audit Log Pipeline Verification
+#
+# This test verifies the audit logging pipeline:
+#   1. Inject mock audit events to Vector webhook
+#   2. Vector collects and pushes to NATS
+#   3. Verify events exist in NATS JetStream queue
+#
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: audit-log-pipeline
+spec:
+  description: |
+    Verifies that audit events sent to Vector are correctly
+    forwarded to the NATS AUDIT_EVENTS stream.
+    Injects 3 distinct events and verifies their arrival.
+
+  # Use existing namespace to avoid ephemeral namespace creation/deletion
+  namespace: default
+
+  steps:
+    - name: inject-and-verify
+      try:
+        - script:
+            timeout: 2m
+            content: |
+              echo "--------------------------------------------------"
+              echo "1. Injecting 3 Mock Audit Events"
+              echo "--------------------------------------------------"
+              
+              # Unique ID for this test run to avoid collision
+              RUN_ID="run-${RANDOM}"
+              TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+              
+              # Loop to inject 3 events
+              for i in 1 2 3; do
+                EVENT_ID="${RUN_ID}-event-${i}"
+                echo "Injecting Event: $EVENT_ID"
+                
+                # Use simpler JSON construction to avoid heredoc artifact issues
+                PAYLOAD="{\"kind\":\"EventList\",\"apiVersion\":\"audit.k8s.io/v1\",\"items\":[{\"auditID\":\"${EVENT_ID}\",\"stage\":\"ResponseComplete\",\"level\":\"Metadata\",\"verb\":\"test-action\",\"requestURI\":\"/api/test/${i}\",\"objectRef\":{\"resource\":\"pods\",\"namespace\":\"default\",\"name\":\"test-pod-${i}\"},\"stageTimestamp\":\"${TIMESTAMP}\"}]}"
+                
+                kubectl exec -n nats-system deployment/nats-box -- \
+                  curl -s -X POST \
+                  "http://vector-sidecar.search-system.svc.cluster.local:8080/events" \
+                  -H "Content-Type: application/json" \
+                  -d "$PAYLOAD"
+              done
+              
+              echo ""
+              echo "--------------------------------------------------"
+              echo "2. Verifying Events in NATS"
+              echo "--------------------------------------------------"
+              
+              # Small wait for propagation
+              sleep 5
+
+              # Get the last sequence number to determine range
+              LAST_SEQ=$(kubectl exec -n nats-system deployment/nats-box -- nats stream info AUDIT_EVENTS --json | grep '"last_seq"' | awk '{print $2}' | tr -d ',')
+              echo "Last Sequence ID: $LAST_SEQ"
+
+              if [ "$LAST_SEQ" = "0" ]; then
+                 echo "❌ Stream is empty."
+                 exit 1
+              fi
+
+              # Fetch the last 5 messages (or fewer if stream is short) to check for our events
+              # This avoids 'nats stream view' interactive errors
+              START_SEQ=$((LAST_SEQ - 4))
+              if [ "$START_SEQ" -lt 1 ]; then START_SEQ=1; fi
+
+              echo "Checking messages from seq $START_SEQ to $LAST_SEQ..."
+              MESSAGES=""
+              
+              for seq in $(seq $START_SEQ $LAST_SEQ); do
+                 MSG=$(kubectl exec -n nats-system deployment/nats-box -- nats stream get AUDIT_EVENTS "$seq" 2>&1 || true)
+                 MESSAGES="${MESSAGES}\n${MSG}"
+              done
+
+              MISSING=0
+              for i in 1 2 3; do
+                TARGET="${RUN_ID}-event-${i}"
+                if echo "$MESSAGES" | grep -q "$TARGET"; then
+                  echo "✅ Found Event: $TARGET"
+                else
+                  echo "❌ Missing Event: $TARGET"
+                  MISSING=1
+                fi
+              done
+              
+              if [ "$MISSING" -eq 1 ]; then
+                 echo ""
+                 echo "⚠️ Some events were missing from NATS."
+                 echo "Captured Messages Dump:"
+                 echo -e "$MESSAGES"
+                 exit 1
+              fi
+              
+              echo "✅ All 3 events verified successfully."
+
+  # Increase timeouts to avoid Context Deadline Exceeded during cleanup
+  timeouts:
+    cleanup: 2m
+    delete: 2m
