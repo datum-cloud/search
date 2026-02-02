@@ -1,14 +1,30 @@
 version: '3'
 
 includes:
+  # Documentation tasks
   docs:
     taskfile: ./docs/Taskfile.yaml
     dir: ./docs
+  # Test infra tasks
+  # Must set TASK_X_REMOTE_TASKFILES=1 to use this feature.
+  #
+  # See: https://taskfile.dev/experiments/remote-taskfiles
+  test-infra:
+    taskfile: https://raw.githubusercontent.com/datum-cloud/test-infra/{{.TEST_INFRA_REPO_REF}}/Taskfile.yml
+    checksum: a1cf6063def6ee21ba42f8a0818127c92a9a5c313c293387f2294e42480dd3d5
+    vars:
+      REPO_REF: "{{.TEST_INFRA_REPO_REF}}"
 
 vars:
   TOOL_DIR: "{{.USER_WORKING_DIR}}/bin"
+  # Container image configuration
   IMAGE_NAME: "ghcr.io/datum-cloud/search"
   IMAGE_TAG: "dev"
+  TEST_INFRA_CLUSTER_NAME: "test-infra"
+  # Test infra repository configuration - can be overridden with environment variable
+  TEST_INFRA_REPO_REF: 'v0.6.0'
+  # renovate: datasource=go depName=github.com/kyverno/chainsaw
+  CHAINSAW_VERSION: v0.2.13
 
 tasks:
   default:
@@ -130,3 +146,241 @@ tasks:
     cmds:
       - task: docs:diagrams
     silent: true
+
+  dev:setup:
+    silent: true
+    cmds:
+      - task: test-infra:cluster-up
+      - task: test-infra:install-observability
+      - task: dev:install-dependencies
+      - task: dev:deploy
+      
+  dev:install-dependencies:
+    desc: Install all infrastructure dependencies (NATS)
+    silent: true
+    cmds:
+      - |
+        set -e
+        echo "📦 Installing infrastructure dependencies..."
+        echo ""
+
+        # ============================================================
+        # Install NATS
+        # ============================================================
+        echo "📦 Installing NATS for event streaming..."
+
+        echo "Applying NATS resources..."
+        task test-infra:kubectl -- apply -k config/dependencies/nats
+
+        echo "Waiting for NATS namespace to be created..."
+        task test-infra:kubectl -- wait --for=jsonpath='{.status.phase}'=Active namespace/nats-system --timeout=30s 2>/dev/null || echo "⚠️  Namespace not ready yet"
+
+        echo "Waiting for NATS HelmRelease to be ready..."
+        task test-infra:kubectl -- wait --for=condition=ready helmrelease/nats -n nats-system --timeout=300s 2>/dev/null || echo "⚠️  NATS HelmRelease not ready yet (may need Flux installed)"
+
+        echo "Waiting for NATS pods to be ready..."
+        task test-infra:kubectl -- wait --for=condition=ready pod -l app.kubernetes.io/name=nats -n nats-system --timeout=120s 2>/dev/null || echo "⚠️  NATS pods not ready yet"
+
+        echo "✅ NATS installed"
+        echo ""
+
+        # Note: NACK controller is now installed as part of NATS dependencies kustomization above
+        # Stream configurations will be deployed as part of dev:deploy step
+
+        # ============================================================
+        # Summary
+        # ============================================================
+        echo "✅ All infrastructure dependencies installed successfully!"
+        echo ""
+        echo "📊 Check status:"
+        echo "  NATS:                task test-infra:kubectl -- get pods -n nats-system"
+        echo "  NACK controller:     task test-infra:kubectl -- get pods -n nats-system -l app.kubernetes.io/name=nack"
+        echo ""
+        echo "📋 HelmRelease status:"
+        echo "  task test-infra:kubectl -- get helmrelease -n nats-system"
+        echo ""
+        echo "Note: JetStream stream configurations and S3 bucket will be deployed with the Search server."
+        echo ""
+
+  dev:deploy:
+    desc: Deploy Search server to test-infra cluster
+    silent: true
+    cmds:
+      - |
+        set -e
+        echo "🚀 Deploying Search server to test-infra cluster..."
+
+         # Check if deployment manifests exist
+        if [ ! -d "config" ]; then
+          echo "⚠️  Warning: config directory not found"
+          exit 1
+        fi
+
+        echo "📋 Deploying NATS stream configuration..."
+        task test-infra:kubectl -- apply -k config/components/nats-streams
+
+        echo "⏳ Waiting for NATS stream to be ready..."
+        task test-infra:kubectl -- wait --for=condition=ready stream/audit-events -n nats-system --timeout=60s 2>/dev/null || echo "⚠️  Stream not ready yet"
+
+        echo ""
+        echo "📋 Deploying Search server and components..."
+        task test-infra:kubectl -- apply -k config/overlays/dev
+
+        echo ""
+        echo "✅ Search server and all dependencies deployed successfully!"
+        echo ""
+        echo "📊 Check status:"
+        echo "  All resources:     task test-infra:kubectl -- get all -n search-system"
+        echo "  Vector pods:       task test-infra:kubectl -- get pods -l app.kubernetes.io/instance=vector-sidecar -n search-system"
+        echo "  NATS pods:         task test-infra:kubectl -- get pods -n nats-system"
+        echo "  NATS streams:      task test-infra:kubectl -- get streams -n nats-system"
+        echo ""
+        echo "📋 View logs:"
+        echo "  Vector:            task test-infra:kubectl -- logs -l app.kubernetes.io/instance=vector-sidecar -n search-system -f"
+        echo "  NATS:              task test-infra:kubectl -- logs -l app.kubernetes.io/name=nats -n nats-system -f"
+
+  dev:undeploy:
+    desc: Undeploy Search server from test-infra cluster
+    silent: true
+    cmds:
+      - |
+        set -e
+        echo "🗑️  Undeploying Search server and components..."
+        task test-infra:kubectl -- delete -k config/overlays/dev --ignore-not-found=true
+
+        echo "🗑️  Undeploying NATS stream configuration..."
+        task test-infra:kubectl -- delete -k config/components/nats-streams --ignore-not-found=true
+
+        echo "✅ Search server and related components undeployed."
+
+  test:end-to-end:
+    desc: Run end-to-end tests using Chainsaw against the test-infra cluster. Pass directory names to run specific tests (e.g., 'task test:end-to-end -- audit-logging')
+    deps:
+      - task: install-go-tool
+        vars:
+          NAME: chainsaw
+          PACKAGE: github.com/kyverno/chainsaw
+          VERSION: "{{.CHAINSAW_VERSION}}"
+    cmds:
+      - |
+        set -e
+        echo "🧪 Running Chainsaw end-to-end tests against test-infra cluster..."
+
+        # Get kubeconfig for test-infra cluster
+        KUBECONFIG_PATH="${HOME}/.kube/config"
+        KUBE_CONTEXT="kind-{{.TEST_INFRA_CLUSTER_NAME}}"
+
+        # Verify connectivity to test-infra cluster
+        echo "Verifying connectivity to test-infra cluster..."
+        if ! kubectl --context "$KUBE_CONTEXT" get --raw /healthz &>/dev/null; then
+          echo "❌ Error: Cannot connect to test-infra cluster"
+          echo "Please ensure the test infrastructure is running with 'task dev:setup'"
+          echo "You can check the status with:"
+          echo "  task test-infra:kubectl -- get pods -A"
+          exit 1
+        fi
+        echo "✅ Successfully connected to test-infra cluster"
+
+        # Determine test paths based on CLI arguments
+        if [ -z "{{.CLI_ARGS}}" ]; then
+          # No arguments provided - run all tests
+          echo "No test directories specified - running all end-to-end tests..."
+          TEST_PATHS="test/"
+        else
+          # Arguments provided - construct test paths
+          echo "Running tests for specified directories: {{.CLI_ARGS}}"
+          TEST_PATHS=""
+          for dir in {{.CLI_ARGS}}; do
+            if [ -d "test/$dir" ]; then
+              TEST_PATHS="$TEST_PATHS test/$dir"
+            else
+              echo "⚠️  Warning: Test directory 'test/$dir' does not exist, skipping..."
+            fi
+          done
+
+          # Check if we found any valid test directories
+          if [ -z "$TEST_PATHS" ]; then
+            echo "❌ Error: No valid test directories found for arguments: {{.CLI_ARGS}}"
+            echo "Available test directories:"
+            ls -1 test/ 2>/dev/null || echo "  (none)"
+            exit 1
+          fi
+        fi
+
+        echo "📁 Test paths: $TEST_PATHS"
+        echo ""
+
+        # Run Chainsaw with the test-infra cluster context
+        "{{.TOOL_DIR}}/chainsaw" test $TEST_PATHS \
+          --kube-context "$KUBE_CONTEXT" \
+          --test-dir test/
+    silent: true
+
+  install-go-tool:
+    desc: Install a Go tool to {{.TOOL_DIR}}/{{.NAME}} (symlinked from {{.TOOL_DIR}}/{{.NAME}}-{{.VERSION}})
+    silent: true
+    internal: true
+    # vars: - Variables that need to be set when depending on this task
+    #   NAME:
+    #   PACKAGE:
+    #   VERSION:
+    cmds:
+      - mkdir -p {{.TOOL_DIR}}
+      - |
+        set -e
+        # Capture Taskfile vars into shell vars for clarity and safety in the script
+        _NAME="{{.NAME}}"
+        _PACKAGE="{{.PACKAGE}}"
+        _VERSION="{{.VERSION}}"
+        _TOOL_DIR="{{.TOOL_DIR}}"
+
+        _VERSIONED_TOOL_PATH="$_TOOL_DIR/$_NAME-$_VERSION" # e.g., ./bin/crdoc-v0.6.4
+        _SYMLINK_PATH="$_TOOL_DIR/$_NAME"                 # e.g., ./bin/crdoc (this is where go install puts it first)
+
+        # Check if the correctly versioned binary already exists
+        if [ ! -f "$_VERSIONED_TOOL_PATH" ]; then
+          echo "Downloading $_PACKAGE@$_VERSION (binary name: $_NAME) to $_VERSIONED_TOOL_PATH"
+
+          # Ensure the path where `go install` will place the binary (before mv) is clear.
+          # This is $_SYMLINK_PATH (e.g., ./bin/crdoc).
+          if [ -d "$_SYMLINK_PATH" ]; then
+            echo "Error: Target path $_SYMLINK_PATH for 'go install' is an existing directory. Please remove it manually."
+            exit 1
+          fi
+          # Remove if it's a file or symlink, to mimic `rm -f $(1)` from Makefile.
+          # This ensures 'go install' doesn't conflict with an existing symlink or wrong file.
+          echo "Preparing $_SYMLINK_PATH for new installation..."
+          rm -f "$_SYMLINK_PATH" || true
+
+          echo "Installing with GOBIN=$_TOOL_DIR..."
+          # 'go install' will place the executable (named $_NAME) into $_TOOL_DIR.
+          # This relies on $_NAME being the actual binary name derived from $_PACKAGE.
+          if ! GOBIN="$_TOOL_DIR" go install "$_PACKAGE@$_VERSION"; then
+            echo "Failed to 'go install $_PACKAGE@$_VERSION' with GOBIN=$_TOOL_DIR"
+            exit 1
+          fi
+
+          # After `go install`, the binary should be at $_SYMLINK_PATH (e.g. $_TOOL_DIR/$_NAME)
+          if [ ! -f "$_SYMLINK_PATH" ]; then
+            echo "Error: 'go install' did not produce $_SYMLINK_PATH"
+            # As a fallback, check if it was installed with the package basename if _NAME was different
+            _PKG_BASENAME=$(basename "$_PACKAGE")
+            if [ "$_PKG_BASENAME" != "$_NAME" ] && [ -f "$_TOOL_DIR/$_PKG_BASENAME" ]; then
+                echo "Found $_TOOL_DIR/$_PKG_BASENAME instead (package basename). Moving this one."
+                mv "$_TOOL_DIR/$_PKG_BASENAME" "$_VERSIONED_TOOL_PATH"
+            else
+                echo "Please ensure the NAME variable ('$_NAME') accurately matches the binary name produced by 'go install $_PACKAGE'."
+                exit 1
+            fi
+          else
+            # Binary $_SYMLINK_PATH was created as expected. Now move it to its versioned path.
+            echo "Moving installed binary from $_SYMLINK_PATH to $_VERSIONED_TOOL_PATH"
+            mv "$_SYMLINK_PATH" "$_VERSIONED_TOOL_PATH"
+          fi
+
+          # Create/update the symlink (e.g., ./bin/crdoc -> crdoc-v0.6.4)
+          # The target of the symlink is relative to _TOOL_DIR.
+          echo "Creating/updating symlink: $_SYMLINK_PATH -> $_NAME-$_VERSION (within $_TOOL_DIR)"
+          (cd "$_TOOL_DIR" && ln -sf "$_NAME-$_VERSION" "$_NAME")
+          echo "Tool $_NAME is now available at $_SYMLINK_PATH (points to $_VERSIONED_TOOL_PATH)"
+        fi
