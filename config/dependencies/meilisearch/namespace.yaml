@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: meilisearch-system
+  labels:
+    app.kubernetes.io/name: meilisearch
+    app.kubernetes.io/component: search

@@ -13,6 +13,7 @@ components:
   - ../../components/cert-manager-ca
   - ../../components/observability
   - ../../components/tracing
+  - ../../components/vector-sidecar
 
 # Override image tag for dev builds
 images:

@@ -1,0 +1,89 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: meilisearch-health
+spec:
+  description: |
+    Verifies that the Meilisearch service is healthy and functional.
+    Injects a test document and searches for it to verify indexing.
+
+  # Use existing namespace to avoid ephemeral namespace creation/deletion
+  namespace: default
+
+  steps:
+    - name: setup-variables
+      description: "Generates a random movie title and stores it in a ConfigMap"
+      try:
+        - script:
+            content: |
+              # Generate random title and store in ConfigMap
+              TITLE="Movie-$RANDOM"
+              kubectl create configmap meilisearch-test-data --from-literal=title="$TITLE" --dry-run=client -o yaml | kubectl apply -f -
+            check:
+              ($error): ~
+
+    - name: check-service-health
+      description: "Verifies service health endpoint"
+      try:
+        - script:
+            content: |
+              kubectl run curl-health-$RANDOM --image=curlimages/curl --restart=Never --rm -i -- curl -f -v http://meilisearch.meilisearch-system.svc.cluster.local:7700/health
+            check:
+              ($error): ~
+
+    - name: create-index
+      description: "Creates the movies index"
+      try:
+        - script:
+            content: |
+              kubectl run curl-create-index-$RANDOM --image=curlimages/curl --restart=Never --rm -i -- curl -f -X POST \
+                -H "Authorization: Bearer search-master-key" \
+                -H "Content-Type: application/json" \
+                --data '{"uid": "movies", "primaryKey": "id"}' \
+                http://meilisearch.meilisearch-system.svc.cluster.local:7700/indexes
+            check:
+              ($error): ~
+
+    - name: add-document
+      description: "Adds a test document with random title"
+      try:
+        - script:
+            content: |
+              # Get title from ConfigMap
+              TITLE=$(kubectl get cm meilisearch-test-data -o jsonpath='{.data.title}')
+              
+              kubectl run curl-add-doc-$RANDOM --image=curlimages/curl --restart=Never --rm -i -- curl -f -X POST \
+                -H "Authorization: Bearer search-master-key" \
+                -H "Content-Type: application/json" \
+                --data '[{"id": 1, "title": "'"$TITLE"'", "genres": ["Romance", "Drama"]}]' \
+                http://meilisearch.meilisearch-system.svc.cluster.local:7700/indexes/movies/documents
+            check:
+              ($error): ~
+
+    - name: search-document
+      description: "Searches for the document to verify indexing"
+      try:
+        - script:
+            timeout: 20s
+            content: |
+              # Wait for task to process
+              sleep 2
+              # Get title from ConfigMap
+              TITLE=$(kubectl get cm meilisearch-test-data -o jsonpath='{.data.title}')
+              
+              kubectl run curl-search-$RANDOM --image=curlimages/curl --restart=Never --rm -i -- curl -f -X POST \
+                -H "Authorization: Bearer search-master-key" \
+                -H "Content-Type: application/json" \
+                --data '{"q": "'"$TITLE"'"}' \
+                http://meilisearch.meilisearch-system.svc.cluster.local:7700/indexes/movies/search | grep "$TITLE"
+            check:
+              ($error): ~
+    
+    - name: cleanup
+      description: "Cleans up temporary resources"
+      try:
+        - script:
+            content: |
+              kubectl delete configmap meilisearch-test-data --ignore-not-found=true
+            check:
+              ($error): ~
