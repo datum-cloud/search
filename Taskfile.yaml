@@ -184,6 +184,26 @@ tasks:
         echo "✅ NATS installed"
         echo ""
 
+        # ============================================================
+        # Install Meilisearch
+        # ============================================================
+        echo "📦 Installing Meilisearch..."
+
+        echo "Applying Meilisearch resources..."
+        task test-infra:kubectl -- apply -k config/dependencies/meilisearch
+
+        echo "Waiting for Meilisearch namespace to be created..."
+        task test-infra:kubectl -- wait --for=jsonpath='{.status.phase}'=Active namespace/meilisearch-system --timeout=30s 2>/dev/null || echo "⚠️  Namespace not ready yet"
+
+        echo "Waiting for Meilisearch HelmRelease to be ready..."
+        task test-infra:kubectl -- wait --for=condition=ready helmrelease/meilisearch -n meilisearch-system --timeout=300s 2>/dev/null || echo "⚠️  Meilisearch HelmRelease not ready yet"
+
+        echo "Waiting for Meilisearch pods to be ready..."
+        task test-infra:kubectl -- wait --for=condition=ready pod -l app.kubernetes.io/name=meilisearch -n meilisearch-system --timeout=120s 2>/dev/null || echo "⚠️  Meilisearch pods not ready yet"
+
+        echo "✅ Meilisearch installed"
+        echo ""
+
         # Note: NACK controller is now installed as part of NATS dependencies kustomization above
         # Stream configurations will be deployed as part of dev:deploy step
 
@@ -195,9 +215,11 @@ tasks:
         echo "📊 Check status:"
         echo "  NATS:                task test-infra:kubectl -- get pods -n nats-system"
         echo "  NACK controller:     task test-infra:kubectl -- get pods -n nats-system -l app.kubernetes.io/name=nack"
+        echo "  Meilisearch:         task test-infra:kubectl -- get pods -n meilisearch-system"
         echo ""
         echo "📋 HelmRelease status:"
         echo "  task test-infra:kubectl -- get helmrelease -n nats-system"
+        echo "  task test-infra:kubectl -- get helmrelease -n meilisearch-system"
         echo ""
         echo "Note: JetStream stream configurations and S3 bucket will be deployed with the Search server."
         echo ""
@@ -291,10 +313,14 @@ tasks:
           echo "Running tests for specified directories: {{.CLI_ARGS}}"
           TEST_PATHS=""
           for dir in {{.CLI_ARGS}}; do
-            if [ -d "test/$dir" ]; then
-              TEST_PATHS="$TEST_PATHS test/$dir"
+            if [ -d "$dir" ]; then
+                # If argument is a valid path itself (e.g. test/infra/meilisearch), use it
+                TEST_PATHS="$TEST_PATHS $dir"
+            elif [ -d "test/$dir" ]; then
+                # If argument is a subdirectory name (e.g. infra/meilisearch), prepend test/
+                TEST_PATHS="$TEST_PATHS test/$dir"
             else
-              echo "⚠️  Warning: Test directory 'test/$dir' does not exist, skipping..."
+                echo "⚠️  Warning: Test directory '$dir' or 'test/$dir' does not exist, skipping..."
             fi
           done
 
@@ -312,8 +338,7 @@ tasks:
 
         # Run Chainsaw with the test-infra cluster context
         "{{.TOOL_DIR}}/chainsaw" test $TEST_PATHS \
-          --kube-context "$KUBE_CONTEXT" \
-          --test-dir test/
+          --kube-context "$KUBE_CONTEXT"
     silent: true
 
   install-go-tool:
