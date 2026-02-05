@@ -1,0 +1,42 @@
+package validation
+
+import (
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
+	"go.miloapis.net/search/internal/cel"
+	"go.miloapis.net/search/internal/jsonpath"
+	policyv1alpha1 "go.miloapis.net/search/pkg/apis/policy/v1alpha1"
+)
+
+// ValidateResourceIndexPolicy validates a ResourceIndexPolicy.
+// It checks:
+// 1. CEL expressions in conditions
+// 2. JSONPath syntax in fields
+func ValidateResourceIndexPolicy(policy *policyv1alpha1.ResourceIndexPolicy, celValidator *cel.Validator) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate CEL expressions in conditions
+	for i, condition := range policy.Spec.Conditions {
+		errs := celValidator.Validate(condition.Expression)
+		for _, err := range errs {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec", "conditions").Index(i).Child("expression"),
+				condition.Expression,
+				err,
+			))
+		}
+	}
+
+	// Validate JSONPath in fields
+	for i, fieldPolicy := range policy.Spec.Fields {
+		if err := jsonpath.ValidatePath(fieldPolicy.Path); err != "" {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec", "fields").Index(i).Child("path"),
+				fieldPolicy.Path,
+				err,
+			))
+		}
+	}
+
+	return allErrs
+}

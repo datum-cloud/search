@@ -4,12 +4,11 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"go.miloapis.net/search/internal/cel"
-	"go.miloapis.net/search/internal/jsonpath"
+	"go.miloapis.net/search/internal/policy/validation"
 	policyv1alpha1 "go.miloapis.net/search/pkg/apis/policy/v1alpha1"
 )
 
@@ -28,30 +27,7 @@ func (v *ResourceIndexPolicyValidator) ValidateCreate(ctx context.Context, obj *
 
 	logger.Info("Validating ResourceIndexPolicy")
 
-	var allErrs field.ErrorList
-
-	// Validate CEL expressions in conditions
-	for i, condition := range obj.Spec.Conditions {
-		errs := v.CelValidator.Validate(condition.Expression)
-		for _, err := range errs {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec", "conditions").Index(i).Child("expression"),
-				condition.Expression,
-				err,
-			))
-		}
-	}
-
-	// Validate JSONPath in fields
-	for i, fieldPolicy := range obj.Spec.Fields {
-		if err := jsonpath.ValidatePath(fieldPolicy.Path); err != "" {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec", "fields").Index(i).Child("path"),
-				fieldPolicy.Path,
-				err,
-			))
-		}
-	}
+	allErrs := validation.ValidateResourceIndexPolicy(obj, v.CelValidator)
 
 	if len(allErrs) > 0 {
 		return nil, errors.NewInvalid(policyv1alpha1.SchemeGroupVersion.WithKind("ResourceIndexPolicy").GroupKind(), obj.Name, allErrs)
