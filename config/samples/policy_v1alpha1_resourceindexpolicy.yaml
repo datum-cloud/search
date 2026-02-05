@@ -1,32 +1,33 @@
 apiVersion: policy.search.miloapis.com/v1alpha1
 kind: ResourceIndexPolicy
 metadata:
-  name: contact-index-policy-2
+  name: contact-index-policy-3
 spec:
   targetResource:
-    group: "j"
-    version: v1
+    group: "notification.miloapis.com"
+    version: v1alpha1
     kind: Contact
   
   # Only index contacts that are active
   conditions:
     - name: is-active
-      expression: "object.status.active == true"
-    - name: is-active
-      expression: "object.status.active == true"
+      expression: ".status.active == true"
+    - name: is-created
+      expression: "metadata.status.created == true"
 
   # Define which fields to index
   fields:
-    - path: ".spec.lastName"
+    - path: ".spec.firstName"
       searchable: true
       filterable: false
     - path: ".spec.lastName"
-      searchable: false
+      searchable: true
       filterable: false
     - path: ".spec.email"
-      searchable: false
+      searchable: true
       filterable: false
     - path: ".metadata.labels['department']"
+      searchable: true
       filterable: false
       facetable: false
 
