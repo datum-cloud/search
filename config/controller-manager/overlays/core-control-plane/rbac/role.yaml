@@ -9,19 +9,9 @@ rules:
   resources:
   - resourceindexpolicies
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
-- apiGroups:
-  - policy.search.miloapis.com
-  resources:
-  - resourceindexpolicies/finalizers
-  verbs:
-  - update
 - apiGroups:
   - policy.search.miloapis.com
   resources:

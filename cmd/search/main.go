@@ -21,6 +21,8 @@ import (
 	logsapi "k8s.io/component-base/logs/api/v1"
 	"k8s.io/klog/v2"
 
+	"go.miloapis.net/search/cmd/search/manager"
+
 	// Register JSON logging format
 	_ "k8s.io/component-base/logs/json/register"
 )
@@ -50,6 +52,7 @@ Exposes SearchQuery resources accessible through kubectl or any Kubernetes clien
 
 	cmd.AddCommand(NewServeCommand())
 	cmd.AddCommand(NewVersionCommand())
+	cmd.AddCommand(manager.NewControllerManagerCommand())
 
 	return cmd
 }
