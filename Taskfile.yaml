@@ -14,8 +14,10 @@ includes:
     checksum: a1cf6063def6ee21ba42f8a0818127c92a9a5c313c293387f2294e42480dd3d5
     vars:
       REPO_REF: "{{.TEST_INFRA_REPO_REF}}"
+      WAIT_TIMEOUT: "{{.WAIT_TIMEOUT}}"
 
 vars:
+  WAIT_TIMEOUT: "10m"
   TOOL_DIR: "{{.USER_WORKING_DIR}}/bin"
   # Container image configuration
   IMAGE_NAME: "ghcr.io/datum-cloud/search"
@@ -94,6 +96,16 @@ tasks:
 
         echo "✅ Container image built: {{.IMAGE_NAME}}:{{.IMAGE_TAG}}"
 
+  dev:load:
+    desc: Load the Search container image into the kind cluster
+    silent: true
+    cmds:
+      - |
+        set -e
+        echo "Loading image {{.IMAGE_NAME}}:{{.IMAGE_TAG}} into kind cluster '{{.TEST_INFRA_CLUSTER_NAME}}'..."
+        kind load docker-image "{{.IMAGE_NAME}}:{{.IMAGE_TAG}}" --name "{{.TEST_INFRA_CLUSTER_NAME}}"
+        echo "Successfully loaded image into kind cluster"
+
   # Code generation tasks
   generate:
     desc: Generate deepcopy and client code
@@ -166,6 +178,8 @@ tasks:
       - task: test-infra:cluster-up
       - task: test-infra:install-observability
       - task: dev:install-dependencies
+      - task: dev:build
+      - task: dev:load
       - task: dev:deploy
       
   dev:install-dependencies:
@@ -460,3 +474,26 @@ tasks:
           (cd "$_TOOL_DIR" && ln -sf "$_NAME-$_VERSION" "$_NAME")
           echo "Tool $_NAME is now available at $_SYMLINK_PATH (points to $_VERSIONED_TOOL_PATH)"
         fi
+
+  dev:redeploy:
+    desc: Quick rebuild and redeploy for development iterations
+    deps:
+      - dev:build
+      - dev:load
+      - dev:deploy
+    cmds:
+      - |
+        set -e
+        echo "Redeploying Search's apiserver..."
+
+        echo "Redeploying Search controller manager..."
+
+        # Restart the deployment to pick up new image
+        task test-infra:kubectl -- rollout restart deployment/search-controller-manager -n search-system
+
+        # Wait for rollout to complete
+        echo "Waiting for rollout to complete..."
+        task test-infra:kubectl -- rollout status deployment/search-controller-manager -n search-system --timeout=120s
+
+        echo "✅ Redeployment complete!"
+        echo "Check logs with: task test-infra:kubectl -- logs -n search-system -l app.kubernetes.io/name=search-controller-manager"

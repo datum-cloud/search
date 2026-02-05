@@ -5,6 +5,12 @@ namespace: search-system
 
 resources:
   - ../../base
+  # Policy CRDs
+  - ../../crd/bases/policy
+  # Controller manager with RBAC
+  - ../../controller-manager/overlays/core-control-plane
+  # Webhook configuration (auto-generated)
+  - ../../webhook
 
 # Include components for development environment
 components:
@@ -19,3 +25,24 @@ components:
 images:
   - name: ghcr.io/datum-cloud/search
     newTag: dev
+
+# Patches for webhook configuration
+patches:
+  # Patch webhook configuration: add CA injection, update service reference
+  - target:
+      kind: ValidatingWebhookConfiguration
+      name: validating-webhook-configuration
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: search-validating-webhook-configuration
+      - op: add
+        path: /metadata/annotations
+        value:
+          cert-manager.io/inject-ca-from: search-system/search-ca
+      - op: replace
+        path: /webhooks/0/clientConfig/service/name
+        value: search-controller-manager-webhook
+      - op: replace
+        path: /webhooks/0/clientConfig/service/namespace
+        value: search-system
