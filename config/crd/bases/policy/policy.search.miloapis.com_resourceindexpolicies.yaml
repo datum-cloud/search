@@ -1,0 +1,238 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: resourceindexpolicies.policy.search.miloapis.com
+spec:
+  group: policy.search.miloapis.com
+  names:
+    kind: ResourceIndexPolicy
+    listKind: ResourceIndexPolicyList
+    plural: resourceindexpolicies
+    singular: resourceindexpolicy
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ResourceIndexPolicy defines a policy for indexing resources.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ResourceIndexPolicySpec serves as the specification for a
+              ResourceIndexPolicy.
+            properties:
+              conditions:
+                description: |-
+                  Conditions filter which resources are indexed.
+                  CEL expressions that filter which resources are indexed. Multiple
+                   conditions can be specified and are evaluated with OR semantics - a
+                   resource is indexed if it satisfies ANY condition. Use && within a
+                   single expression to require multiple criteria together.
+
+                   Each condition has:
+                   - name: A unique identifier for the condition, used in status reporting
+                     and debugging to identify which condition(s) matched a resource.
+                   - expression: A CEL expression that must evaluate to a boolean. The
+                     resource is available as the root object in the expression context.
+
+                   Available CEL operations:
+                   - Field access: spec.replicas, metadata.name, status.phase
+                   - Map access: metadata.labels["app"], metadata.annotations["key"]
+                   - Comparisons: ==, !=, <, <=, >, >=
+                   - Logical operators: &&, ||, !
+                   - String functions: contains(), startsWith(), endsWith(), matches()
+                   - List functions: exists(), all(), size(), map(), filter()
+                   - Membership: "value" in list, "key" in map
+                   - Ternary: condition ? trueValue : falseValue
+                items:
+                  description: PolicyCondition defines a CEL condition for filtering
+                    resources.
+                  properties:
+                    expression:
+                      description: Expression is a CEL expression that must evaluate
+                        to a boolean.
+                      minLength: 1
+                      type: string
+                    name:
+                      description: Name is a unique identifier for the condition.
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                  required:
+                  - expression
+                  - name
+                  type: object
+                maxItems: 10
+                minItems: 1
+                type: array
+              fields:
+                description: Fields defines which fields from the resource are indexed.
+                items:
+                  description: FieldPolicy defines how a resource field should be
+                    indexed and how they behave in search operations.
+                  properties:
+                    facetable:
+                      default: false
+                      description: |-
+                        Facetable indicates if the field can be used for faceting.
+                        This is a forward-looking option that will be added in a future release.
+                      type: boolean
+                    filterable:
+                      default: false
+                      description: |-
+                        Filterable indicates if the field can be used in filter expressions.
+                        This is a forward-looking option that will be added in a future release.
+                      type: boolean
+                    path:
+                      description: |-
+                        Path is the JSONPath to the field value.
+                        Supports nested paths and map key access using bracket notation.
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                    searchable:
+                      default: false
+                      description: Searchable indicates if the field should be included
+                        in full-text search.
+                      type: boolean
+                  required:
+                  - path
+                  type: object
+                  x-kubernetes-validations:
+                  - message: filterable is a forward-looking option and will be added
+                      in a future release. It must be false.
+                    rule: '!self.filterable'
+                  - message: facetable is a forward-looking option and will be added
+                      in a future release. It must be false.
+                    rule: '!self.facetable'
+                  - message: searchable must be true. Currently, only full-text search
+                      is supported.
+                    rule: self.searchable
+                maxItems: 10
+                minItems: 1
+                type: array
+              targetResource:
+                description: TargetResource identifies the resource type this policy
+                  applies to.
+                properties:
+                  group:
+                    description: Group is the API group of the resource.
+                    minLength: 1
+                    type: string
+                  kind:
+                    description: Kind is the kind of the resource.
+                    minLength: 1
+                    type: string
+                  version:
+                    description: Version is the API version of the resource.
+                    minLength: 1
+                    type: string
+                required:
+                - group
+                - kind
+                - version
+                type: object
+            required:
+            - conditions
+            - fields
+            - targetResource
+            type: object
+            x-kubernetes-validations:
+            - message: condition names must be unique
+              rule: self.conditions.all(c, self.conditions.exists_one(x, x.name ==
+                c.name))
+            - message: field paths must be unique
+              rule: self.fields.all(f, self.fields.exists_one(x, x.path == f.path))
+          status:
+            description: ResourceIndexPolicyStatus serves as the status for a ResourceIndexPolicy.
+            properties:
+              conditions:
+                default:
+                - lastTransitionTime: "1970-01-01T00:00:00Z"
+                  message: Waiting for control plane to reconcile
+                  reason: Unknown
+                  status: Unknown
+                  type: Ready
+                description: Conditions represents the latest available observations
+                  of the policy's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+            type: object
+        required:
+        - metadata
+        - spec
+        type: object
+    served: true
+    storage: true
