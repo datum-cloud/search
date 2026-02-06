@@ -38,5 +38,23 @@ func ValidateResourceIndexPolicy(policy *policyv1alpha1.ResourceIndexPolicy, cel
 		}
 	}
 
+	// Validate repeated field names
+	seenFieldPaths := make(map[string]bool)
+	for i, fieldPolicy := range policy.Spec.Fields {
+		if seenFieldPaths[fieldPolicy.Path] {
+			allErrs = append(allErrs, field.Duplicate(field.NewPath("spec", "fields").Index(i).Child("path"), fieldPolicy.Path))
+		}
+		seenFieldPaths[fieldPolicy.Path] = true
+	}
+
+	// Validate repeated condition names
+	seenConditionNames := make(map[string]bool)
+	for i, condition := range policy.Spec.Conditions {
+		if seenConditionNames[condition.Name] {
+			allErrs = append(allErrs, field.Duplicate(field.NewPath("spec", "conditions").Index(i).Child("name"), condition.Name))
+		}
+		seenConditionNames[condition.Name] = true
+	}
+
 	return allErrs
 }

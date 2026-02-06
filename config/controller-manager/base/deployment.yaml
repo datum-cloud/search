@@ -39,9 +39,6 @@ spec:
         - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
         - --health-probe-bind-address=$(HEALTH_PROBE_BIND_ADDRESS)
         - --leader-elect=$(LEADER_ELECT)
-        - --webhook-cert-path=$(WEBHOOK_CERT_PATH)
-        - --webhook-cert-name=$(WEBHOOK_CERT_NAME)
-        - --webhook-cert-key=$(WEBHOOK_CERT_KEY)
         - -v=$(LOG_LEVEL)
         env:
         - name: POD_NAMESPACE
@@ -54,12 +51,6 @@ spec:
           value: ":8081"
         - name: LEADER_ELECT
           value: "true"
-        - name: WEBHOOK_CERT_PATH
-          value: "/var/run/search-controller-manager/tls"
-        - name: WEBHOOK_CERT_NAME
-          value: "tls.crt"
-        - name: WEBHOOK_CERT_KEY
-          value: "tls.key"
         - name: LOG_LEVEL
           value: "4"
         securityContext:
@@ -71,9 +62,6 @@ spec:
             drop:
             - ALL
         ports:
-        - containerPort: 9443
-          name: webhook-server
-          protocol: TCP
         - containerPort: 8081
           name: health
           protocol: TCP
@@ -100,24 +88,10 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
         volumeMounts:
-        - name: webhook-certs
-          mountPath: /var/run/search-controller-manager/tls
-          readOnly: true
         - name: tmp
           mountPath: /tmp
       volumes:
-      - name: webhook-certs
-        csi:
-          driver: csi.cert-manager.io
-          readOnly: true
-          volumeAttributes:
-            csi.cert-manager.io/issuer-name: selfsigned-cluster-issuer
-            csi.cert-manager.io/issuer-kind: ClusterIssuer
-            csi.cert-manager.io/common-name: search-controller-manager-webhook.search-system.svc
-            csi.cert-manager.io/dns-names: "search-controller-manager-webhook,search-controller-manager-webhook.search-system,search-controller-manager-webhook.search-system.svc,search-controller-manager-webhook.search-system.svc.cluster.local"
-            csi.cert-manager.io/duration: "8760h"
-            csi.cert-manager.io/renew-before: "720h"
-            csi.cert-manager.io/fs-group: "65532"
       - name: tmp
         emptyDir: {}
+
       restartPolicy: Always

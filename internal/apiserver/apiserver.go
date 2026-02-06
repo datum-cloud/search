@@ -12,8 +12,11 @@ import (
 	"k8s.io/klog/v2"
 
 	_ "go.miloapis.net/search/internal/metrics"
+	"go.miloapis.net/search/internal/registry/policy/resourceindexpolicy"
+	policyinstall "go.miloapis.net/search/pkg/apis/policy/install"
+	policyv1alpha1 "go.miloapis.net/search/pkg/apis/policy/v1alpha1"
 	"go.miloapis.net/search/pkg/apis/search/install"
-	"go.miloapis.net/search/pkg/apis/search/v1alpha1"
+	searchv1alpha1 "go.miloapis.net/search/pkg/apis/search/v1alpha1"
 )
 
 var (
@@ -25,8 +28,16 @@ var (
 
 func init() {
 	install.Install(Scheme)
+	policyinstall.Install(Scheme)
 
 	metav1.AddToGroupVersion(Scheme, schema.GroupVersion{Version: "v1"})
+
+	// Register the types as internal as well to support watches and other internal operations
+	// that expect an internal version.
+	Scheme.AddKnownTypes(schema.GroupVersion{Group: policyv1alpha1.GroupName, Version: runtime.APIVersionInternal},
+		&policyv1alpha1.ResourceIndexPolicy{},
+		&policyv1alpha1.ResourceIndexPolicyList{},
+	)
 
 	// Register unversioned meta types required by the API machinery.
 	unversioned := schema.GroupVersion{Group: "", Version: "v1"}
@@ -87,15 +98,25 @@ func (c completedConfig) New() (*SearchServer, error) {
 		GenericAPIServer: genericServer,
 	}
 
-	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(v1alpha1.GroupName, Scheme, metav1.ParameterCodec, Codecs)
+	// Install 'search' API group
+	searchAPIGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(searchv1alpha1.GroupName, Scheme, metav1.ParameterCodec, Codecs)
+	searchV1alpha1Storage := map[string]rest.Storage{}
+	searchAPIGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = searchV1alpha1Storage
+	if err := s.GenericAPIServer.InstallAPIGroup(&searchAPIGroupInfo); err != nil {
+		return nil, err
+	}
 
-	v1alpha1Storage := map[string]rest.Storage{}
-	// TODO: Add storage implementations here
-	// Example: v1alpha1Storage["searchqueries"] = search.NewQueryStorage(storage)
-
-	apiGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = v1alpha1Storage
-
-	if err := s.GenericAPIServer.InstallAPIGroup(&apiGroupInfo); err != nil {
+	// Install 'policy' API group
+	policyAPIGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(policyv1alpha1.GroupName, Scheme, metav1.ParameterCodec, Codecs)
+	policyStorage, err := resourceindexpolicy.NewREST(Scheme, c.GenericConfig.RESTOptionsGetter)
+	if err != nil {
+		return nil, err
+	}
+	policyAPIGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = map[string]rest.Storage{
+		"resourceindexpolicies":        policyStorage.Store,
+		"resourceindexpolicies/status": policyStorage.Status,
+	}
+	if err := s.GenericAPIServer.InstallAPIGroup(&policyAPIGroupInfo); err != nil {
 		return nil, err
 	}
 

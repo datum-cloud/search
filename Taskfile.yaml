@@ -119,20 +119,42 @@ tasks:
     cmds:
       - echo "Generating deepcopy and object files..."
       - "\"{{.TOOL_DIR}}/controller-gen\" object paths=\"./pkg/apis/...\""
-      - echo "Generating CRD manifests for each package..."
-      - |
-        set -e
-        for package_dir in pkg/apis/*/; do
-          package_name=$(basename "$package_dir")
-          echo "Generating CRDs for package: $package_name"
-          mkdir -p "config/crd/bases/$package_name"
-          "{{.TOOL_DIR}}/controller-gen" crd paths="./$package_dir..." output:dir="./config/crd/bases/$package_name"
-        done
-      - echo "Generating webhook files..."
-      - "\"{{.TOOL_DIR}}/controller-gen\" webhook paths=\"./internal/webhooks/...\" output:dir=\"./config/webhook\""
       # Generate RBAC rules for the controllers.
       - echo "Generating RBAC rules for the controllers..."
       - "\"{{.TOOL_DIR}}/controller-gen\" rbac:roleName=milo-controller-manager paths=\"./internal/controllers/...\" output:dir=\"./config/controller-manager/overlays/core-control-plane/rbac\""
+      - task: generate:openapi
+    silent: true
+
+  generate:openapi:
+    desc: Generate OpenAPI definitions for search API types
+    deps:
+      - task: install-go-tool
+        vars:
+          NAME: openapi-gen
+          PACKAGE: k8s.io/code-generator/cmd/openapi-gen
+          VERSION: v0.23.0
+    cmds:
+      - echo "Generating OpenAPI definitions..."
+      - |
+        set -e
+        # Packages to generate OpenAPI for
+        PACKAGES=(
+          "pkg/apis/policy/v1alpha1"
+          "pkg/apis/search/v1alpha1"
+        )
+        
+        for REL_DIR in "${PACKAGES[@]}"; do
+          PKG="go.miloapis.net/search/$REL_DIR"
+          echo "Generating OpenAPI for $PKG..."
+          
+          "{{.TOOL_DIR}}/openapi-gen" \
+            --input-dirs "$PKG,k8s.io/apimachinery/pkg/apis/meta/v1,k8s.io/apimachinery/pkg/runtime,k8s.io/apimachinery/pkg/version" \
+            --output-package "$REL_DIR" \
+            --output-base "." \
+            --output-file-base "zz_generated.openapi" \
+            --go-header-file "hack/boilerplate.go.txt" \
+            --report-filename "$REL_DIR/api_violations.report"
+        done
     silent: true
 
   # Test tasks
@@ -189,6 +211,26 @@ tasks:
       - |
         set -e
         echo "📦 Installing infrastructure dependencies..."
+        echo ""
+
+        # ============================================================
+        # Install Etcd
+        # ============================================================
+        echo "📦 Installing Etcd..."
+
+        echo "Applying Etcd resources..."
+        task test-infra:kubectl -- apply -k config/dependencies/etcd
+
+        echo "Waiting for Etcd namespace to be created..."
+        task test-infra:kubectl -- wait --for=jsonpath='{.status.phase}'=Active namespace/etcd-system --timeout=30s 2>/dev/null || echo "⚠️  Namespace not ready yet"
+
+        echo "Waiting for Etcd HelmRelease to be ready..."
+        task test-infra:kubectl -- wait --for=condition=ready helmrelease/etcd -n etcd-system --timeout=300s 2>/dev/null || echo "⚠️  Etcd HelmRelease not ready yet"
+
+        echo "Waiting for Etcd pods to be ready..."
+        task test-infra:kubectl -- wait --for=condition=ready pod -l app.kubernetes.io/name=etcd -n etcd-system --timeout=120s 2>/dev/null || echo "⚠️  Etcd pods not ready yet"
+
+        echo "✅ Etcd installed"
         echo ""
 
         # ============================================================
@@ -269,13 +311,18 @@ tasks:
         task test-infra:kubectl -- apply -k config/components/nats-streams
 
         echo "⏳ Waiting for NATS stream to be ready..."
-        task test-infra:kubectl -- wait --for=condition=ready stream/audit-events -n nats-system --timeout=60s 2>/dev/null || echo "⚠️  Stream not ready yet"
+        task test-infra:kubectl -- wait --for=condition=ready stream/audit-events -n nats-system --timeout=120s 2>/dev/null || echo "⚠️  Stream not ready yet"
 
         echo ""
         echo "📋 Deploying Search server and components..."
         task test-infra:kubectl -- apply -k config/overlays/dev
 
-        echo ""
+        echo "⏳ Waiting for Search API Server to be ready..."
+        task test-infra:kubectl -- wait --for=condition=available deployment/search-apiserver -n search-system --timeout=120s 2>/dev/null || echo "⚠️  Search API Server not ready yet"
+
+        echo "⏳ Waiting for Search Controller Manager to be ready..."
+        task test-infra:kubectl -- wait --for=condition=available deployment/search-controller-manager -n search-system --timeout=120s 2>/dev/null || echo "⚠️  Search Controller Manager not ready yet"
+        
         echo "✅ Search server and all dependencies deployed successfully!"
         echo ""
         echo "📊 Check status:"
@@ -283,10 +330,17 @@ tasks:
         echo "  Vector pods:       task test-infra:kubectl -- get pods -l app.kubernetes.io/instance=vector-sidecar -n search-system"
         echo "  NATS pods:         task test-infra:kubectl -- get pods -n nats-system"
         echo "  NATS streams:      task test-infra:kubectl -- get streams -n nats-system"
+        echo "  Meilisearch pods:  task test-infra:kubectl -- get pods -n meilisearch-system"
+        echo "  Etcd pods:         task test-infra:kubectl -- get pods -n etcd-system"
+        echo "  Search Server pods: task test-infra:kubectl -- get pods -n search-system"
         echo ""
         echo "📋 View logs:"
         echo "  Vector:            task test-infra:kubectl -- logs -l app.kubernetes.io/instance=vector-sidecar -n search-system -f"
         echo "  NATS:              task test-infra:kubectl -- logs -l app.kubernetes.io/name=nats -n nats-system -f"
+        echo "  Meilisearch:       task test-infra:kubectl -- logs -l app.kubernetes.io/name=meilisearch -n meilisearch-system -f"
+        echo "  Etcd:              task test-infra:kubectl -- logs -l app.kubernetes.io/name=etcd -n etcd-system -f"
+        echo "  Search API Server:     task test-infra:kubectl -- logs -l app.kubernetes.io/name=search-apiserver -n search-system -f"
+        echo "  Search Controller:     task test-infra:kubectl -- logs -l app.kubernetes.io/name=search-controller-manager -n search-system -f"
 
   dev:generate-webhook-certs:
     desc: Generate all certificates for webhook server
@@ -297,34 +351,64 @@ tasks:
         export CA_BUNDLE
         # Dynamically patch the generated manifest to use local host url and injected CA bundle
         perl -0777 -pe 's/(\s*)clientConfig:\n\s+service:\n\s+name: webhook-service\n\s+namespace: system\n\s+path: (.*)/$1clientConfig:\n$1  url: https:\/\/host.docker.internal:9443$2\n$1  caBundle: $ENV{CA_BUNDLE}/' config/webhook/manifests.yaml | task test-infra:kubectl -- apply -f -
-  
+
   dev:run-controller:
-    desc: Run the controller manager locally (requires kubeconfig)
-    deps:
-      - dev:apply-crd
-      - dev:generate-webhook-certs
+    desc: Run the controller manager against the LOCAL Search API server (127.0.0.1:9443)
     cmds:
       - |
+        # Generate a temporary kubeconfig pointing to localhost:9443
+        mkdir -p .tmp
+        kubectl config view --minify --raw | \
+          sed "s|server:.*|server: https://127.0.0.1:9443|g" | \
+          sed "s|certificate-authority-data:.*|insecure-skip-tls-verify: true|g" \
+          > .tmp/local-search-kubeconfig.yaml
+      - |
+        echo "🚀 Running controller against local Search API server..."
+        KUBECONFIG=.tmp/local-search-kubeconfig.yaml go run ./cmd/search controller-manager \
+          --metrics-bind-address=:8085 \
+          --health-probe-bind-address=:8086 \
+          --leader-elect=false
+    silent: true
+
+  dev:pf-etcd:
+    desc: Port forward Etcd for local development
+    cmds:
+      - echo "Port forwarding Etcd to localhost:2379..."
+      - task test-infra:kubectl -- port-forward -n etcd-system svc/etcd 2379:2379
+
+  dev:run-apiserver:
+    desc: Run the API server locally (requires dev:pf-etcd running)
+    cmds:
+      - |
+        # Ensure kubeconfig is up to date with the current Kind cluster port
+        echo "Syncing kubeconfig for cluster '{{.TEST_INFRA_CLUSTER_NAME}}'..."
+        kind export kubeconfig --name "{{.TEST_INFRA_CLUSTER_NAME}}"
+      - |
         current_context=$(kubectl config current-context)
-        if [ "$current_context" != "kind-test-infra" ]; then
-          echo "❌ Error: Wrong context! You are in '$current_context', but must be in 'kind-test-infra'." 
+        if [ "$current_context" != "kind-{{.TEST_INFRA_CLUSTER_NAME}}" ]; then
+          echo "❌ Error: Wrong context! You are in '$current_context', but must be in 'kind-{{.TEST_INFRA_CLUSTER_NAME}}'." 
           echo "Please run context switch command first."
           exit 1
         fi
+      - mkdir -p "{{.CERTS_DIR}}"
       - |
-        go run ./cmd/search controller-manager \
-          --metrics-bind-address=:8082 \
-          --health-probe-bind-address=:8083 \
-          --webhook-cert-path={{.CERTS_DIR}} \
-          --webhook-cert-name=server.crt \
-          --webhook-cert-key=server.key
-    silent: true
-
-  dev:apply-crd:
-    desc: Apply all CRDs from config/crd/bases to the cluster
-    cmds:
-      - task test-infra:kubectl -- apply -R -f config/crd/bases
-    silent: true
+        # Extract Kind CA to allowed local kubectl to authenticate via client certs
+        kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > "{{.CERTS_DIR}}/kind-ca.crt"
+      - echo "Running Search API Server locally..."
+      - echo "Ensure you are running 'task dev:pf-etcd' in another terminal!"
+      - |
+        # Use KUBECONFIG if set, otherwise fallback to default
+        KCFG=${KUBECONFIG:-$HOME/.kube/config}
+        go run ./cmd/search serve \
+          --etcd-servers http://127.0.0.1:2379 \
+          --secure-port 9443 \
+          --bind-address 127.0.0.1 \
+          --authentication-skip-lookup=true \
+          --authentication-kubeconfig="$KCFG" \
+          --authorization-kubeconfig="$KCFG" \
+          --kubeconfig="$KCFG" \
+          --client-ca-file="{{.CERTS_DIR}}/kind-ca.crt" \
+          --authorization-always-allow-paths=/healthz,/readyz,/livez,/openapi,/openapi/v2,/openapi/v3,/apis,/api
 
   dev:undeploy:
     desc: Undeploy Search server from test-infra cluster
@@ -489,6 +573,7 @@ tasks:
         echo "Redeploying Search controller manager..."
 
         # Restart the deployment to pick up new image
+        task test-infra:kubectl -- rollout restart deployment/search-apiserver -n search-system
         task test-infra:kubectl -- rollout restart deployment/search-controller-manager -n search-system
 
         # Wait for rollout to complete

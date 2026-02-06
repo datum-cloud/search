@@ -126,8 +126,6 @@ type ResourceIndexPolicyStatus struct {
 	// Conditions represents the latest available observations of the policy's state.
 	// +kubebuilder:default={{type: "Ready", status: "Unknown", reason: "Unknown", message: "Waiting for control plane to reconcile", lastTransitionTime: "1970-01-01T00:00:00Z"}}
 	// +optional
-	// +patchMergeKey=type
-	// +patchStrategy=merge
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 

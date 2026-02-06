@@ -86,6 +86,26 @@ jobs:
           echo "⏳ Waiting for controller manager to be ready..."
           task test-infra:kubectl -- wait --for=condition=Ready pod -l app.kubernetes.io/name=search-controller-manager -n search-system --timeout=120s
 
+          # Wait for API server to be ready
+          echo "⏳ Waiting for API server to be ready..."
+          task test-infra:kubectl -- wait --for=condition=Ready pod -l app.kubernetes.io/name=search-apiserver -n search-system --timeout=120s
+
+          # Verify Aggregated API Availability (CA Injection)
+          echo "⏳ Verifying Aggregated API Availability..."
+          for i in {1..30}; do
+            CA_LEN=$(task test-infra:kubectl -- get apiservice v1alpha1.policy.search.miloapis.com -o jsonpath='{len(.spec.caBundle)}' 2>/dev/null || echo "0")
+            if [ "$CA_LEN" -gt "0" ]; then
+              echo "✅ CA Bundle injected into APIService."
+              break
+            fi
+            echo "Waiting for CA injection into APIService..."
+            sleep 2
+          done
+          
+          # Verify Discovery works
+          echo "Verifying API Discovery..."
+          task test-infra:kubectl -- get resourceindexpolicies
+          
           echo "✓ Search components verification complete"
 
       - name: Run end-to-end tests
