@@ -203,6 +203,16 @@ tasks:
       - task: dev:build
       - task: dev:load
       - task: dev:deploy
+
+  ci:setup:
+    silent: true
+    desc: Setup environment for CI (skips observability to save resources)
+    cmds:
+      - task: test-infra:cluster-up
+      - task: dev:install-dependencies
+      - task: dev:build
+      - task: dev:load
+      - task: dev:deploy
       
   dev:install-dependencies:
     desc: Install all infrastructure dependencies (NATS)
